@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo.png" width="128" alt="TypeCam logo"></p>
+
 # TypeCam
 
 Turn an iPhone into a low-latency, wired camera for **OBS Studio** on macOS.

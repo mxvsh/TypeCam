@@ -49,7 +49,7 @@ All modules live in the single `TypeCam` target, organized by folder:
 | `Transport/` | `Wire` (framing, mirrors `protocol.h`), `StreamServer` (`NWListener` on loopback 7878, handshake, heartbeat), `Streamer` (capture → encoder → server policy: config, keyframes, backpressure, pause) |
 | `Settings/` | `SettingsStore`: `Codable` settings persisted to `UserDefaults`, plus device-capability clamping |
 | `Preview/` | `FrameMailbox` (newest-frame handoff from the capture queue) and `PreviewRenderer` (Metal: NV12 → RGB, rotation, aspect-fill) |
-| `Overlays/` | Metal shaders for histogram, zebra and focus peaking, applied to the preview only and never to the stream (M6) |
+| `Overlays/` | `HistogramAnalyzer` (Y-plane sampling), `LevelMonitor` (CoreMotion), grid/level/histogram views. Zebra and peaking live in `Preview/Preview.metal`. All preview-only, never in the stream. |
 | `UI/` | Camera screen, settings screens, theme, reusable controls (option pickers, meters) |
 
 **Concurrency:** the project uses `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`. Capture, audio, encode and

@@ -27,6 +27,14 @@ struct CameraScreen: View {
                 if camera.state.aeAfLocked {
                     lockBadge
                 }
+                if camera.settings.histogramEnabled {
+                    HStack {
+                        HistogramView(bins: camera.histogram)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 6)
+                }
                 Spacer()
                 if camera.state.isInterrupted {
                     interruptedBanner
@@ -88,8 +96,16 @@ struct CameraScreen: View {
         .ignoresSafeArea()
         .onGeometryChange(for: CGSize.self) { $0.size } action: { previewSize = $0 }
         .overlay {
-            if let indicator = camera.focusIndicator {
-                FocusSquare(indicator: indicator, onExpire: camera.clearFocusIndicator)
+            ZStack {
+                if camera.settings.gridEnabled {
+                    GridOverlay(frame: camera.frameRect(in: previewSize))
+                }
+                if camera.settings.levelEnabled {
+                    LevelIndicator(roll: camera.level.roll, deviation: camera.level.deviation, isFlat: camera.level.isFlat)
+                }
+                if let indicator = camera.focusIndicator {
+                    FocusSquare(indicator: indicator, onExpire: camera.clearFocusIndicator)
+                }
             }
         }
         .onTapGesture(coordinateSpace: .local) { location in

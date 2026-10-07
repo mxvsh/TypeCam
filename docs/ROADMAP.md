@@ -13,7 +13,7 @@ real device, and its docs are updated.
 | M3 | OBS plugin: video | Template setup, usbmux client, device registry, source + properties, VT decode → async video, rotation, keyframe request, multi-device, reconnect after lock/background | ✅ (single phone verified in OBS 32.0.2; two-phone and 1080p60 latency checks still to do) |
 | M4 | Audio pipeline | Mic on the capture session, `AudioRouting` (input/data source/polar pattern), DSP (gain, mute, presets, low-cut), meters, spectrum, PCM/AAC encode, plugin audio decode, shared-clock A/V sync | ✅ (PCM verified in OBS 32.0.2; AAC path built, lightly tested) |
 | M5 | Pro controls + control deck | Physical lenses (manual exposure needs them), manual focus/ISO/shutter/EV, tap-to-focus, AE/AF lock, WB lock; bottom control deck with sliding tabs and ruler dials replaces the rail | ✅ |
-| M6 | Overlays | Grid, histogram, zebra, focus peaking, level (Metal, preview-only) | Overlays at 60 fps without affecting the stream |
+| M6 | Overlays | Grid, level, histogram, zebra, focus peaking (preview-only); ASSIST deck tab + Settings › Overlays | ✅ |
 | M7 | Telemetry, power & polish | `DEVICE_STATUS`/`HOST_STATS`, telemetry sheet, dim/blackout and auto-dim, thermal step-down, onboarding/help, app icon, plugin `.pkg` signing/notarization | End-to-end v1 release candidate |
 
 ## v2 (deferred)

@@ -147,6 +147,30 @@ nonisolated enum AudioFormatSetting: String, Codable, CaseIterable, Identifiable
     }
 }
 
+nonisolated enum ZebraLevel: Int, Codable, CaseIterable, Identifiable, Sendable {
+    case p70 = 70, p80 = 80, p90 = 90, p100 = 100
+
+    var id: Self { self }
+    var label: String { "\(rawValue)%" }
+    /// Full-range luma threshold. 100% is just below white so clipped highlights show.
+    var luma: Float { rawValue == 100 ? 0.98 : Float(rawValue) / 100 }
+}
+
+nonisolated enum PeakingColor: String, Codable, CaseIterable, Identifiable, Sendable {
+    case red, green, blue, white
+
+    var id: Self { self }
+    var label: String { rawValue.capitalized }
+    var rgb: SIMD3<Float> {
+        switch self {
+        case .red: [1, 0.2, 0.2]
+        case .green: [0.2, 1, 0.3]
+        case .blue: [0.25, 0.55, 1]
+        case .white: [1, 1, 1]
+        }
+    }
+}
+
 nonisolated enum DimStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     case blackout, dimPreview
 
@@ -199,6 +223,15 @@ nonisolated struct CaptureSettings: Codable, Equatable, Sendable {
     var audioFormat: AudioFormatSetting = .pcm
     var sampleRate = 48_000
     var stereo = false
+
+    // Overlays (preview only)
+    var gridEnabled = false
+    var levelEnabled = false
+    var histogramEnabled = false
+    var zebraEnabled = false
+    var zebraLevel: ZebraLevel = .p90
+    var peakingEnabled = false
+    var peakingColor: PeakingColor = .red
 
     // Display & power
     var dimStyle: DimStyle = .blackout
@@ -261,6 +294,13 @@ nonisolated struct CaptureSettings: Codable, Equatable, Sendable {
         audioFormat = c.value(.audioFormat, default: d.audioFormat)
         sampleRate = c.value(.sampleRate, default: d.sampleRate)
         stereo = c.value(.stereo, default: d.stereo)
+        gridEnabled = c.value(.gridEnabled, default: d.gridEnabled)
+        levelEnabled = c.value(.levelEnabled, default: d.levelEnabled)
+        histogramEnabled = c.value(.histogramEnabled, default: d.histogramEnabled)
+        zebraEnabled = c.value(.zebraEnabled, default: d.zebraEnabled)
+        zebraLevel = c.value(.zebraLevel, default: d.zebraLevel)
+        peakingEnabled = c.value(.peakingEnabled, default: d.peakingEnabled)
+        peakingColor = c.value(.peakingColor, default: d.peakingColor)
         dimStyle = c.value(.dimStyle, default: d.dimStyle)
         deviceName = c.value(.deviceName, default: d.deviceName)
     }

@@ -26,6 +26,7 @@ struct SettingsView: View {
                         LabeledContent("Audio", value: audioSummary)
                     }
                 }
+                overlaysSection
                 displaySection
                 Section {
                     NavigationLink("Connection & About") { AboutView(store: camera.store) }
@@ -150,6 +151,30 @@ struct SettingsView: View {
             if state.supportsStabilization {
                 Text("Standard stabilization adds a little latency. Cinematic modes aren't offered.")
             }
+        }
+    }
+
+    // MARK: - Overlays
+
+    private var overlaysSection: some View {
+        Section {
+            Toggle("Grid", isOn: setting(\.gridEnabled))
+            Toggle("Level", isOn: setting(\.levelEnabled))
+            Toggle("Histogram", isOn: setting(\.histogramEnabled))
+            Toggle("Zebra Stripes", isOn: setting(\.zebraEnabled))
+            if store.settings.zebraEnabled {
+                OptionPicker(title: "Zebra Level", options: ZebraLevel.allCases, selection: setting(\.zebraLevel),
+                             label: \.label, footer: "Stripes appear on areas at or above this brightness.")
+            }
+            Toggle("Focus Peaking", isOn: setting(\.peakingEnabled))
+            if store.settings.peakingEnabled {
+                OptionPicker(title: "Peaking Color", options: PeakingColor.allCases, selection: setting(\.peakingColor),
+                             label: \.label)
+            }
+        } header: {
+            Text("Overlays")
+        } footer: {
+            Text("Overlays show on the iPhone only and never reach OBS. Quick toggles are in the ASSIST tab.")
         }
     }
 

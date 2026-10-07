@@ -18,6 +18,8 @@ final class CameraModel {
     private(set) var microphoneAuthorization = AVCaptureDevice.authorizationStatus(for: .audio)
     private(set) var audioLevels = AudioLevels()
     private(set) var spectrum: [Float] = Array(repeating: 0, count: SpectrumAnalyzer.bandCount)
+    private(set) var histogram: [Float] = []
+    let level = LevelMonitor()
     /// Where the last tap-to-focus landed, in preview coordinates.
     private(set) var focusIndicator: FocusIndicator?
     /// True from a flip tap until the new camera's first frame is on screen.
@@ -34,6 +36,7 @@ final class CameraModel {
     @ObservationIgnored private let controller = CameraController()
     @ObservationIgnored private let streamer = Streamer()
     @ObservationIgnored private let audio = AudioPipeline()
+    @ObservationIgnored private let histogramAnalyzer = HistogramAnalyzer()
     @ObservationIgnored private var started = false
     @ObservationIgnored private var device: AVCaptureDevice?
     @ObservationIgnored private weak var previewLayer: CALayer?
@@ -66,9 +69,14 @@ final class CameraModel {
         audio.spectrumHandler = { [unowned self] bands in
             Task { @MainActor in self.spectrum = bands }
         }
+        let histogramAnalyzer = histogramAnalyzer
+        histogramAnalyzer.handler = { [unowned self] bins in
+            Task { @MainActor in self.histogram = bins }
+        }
         controller.frameHandler = { sampleBuffer in
             if let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) {
                 frames.put(pixels)
+                histogramAnalyzer.process(pixels)
             }
             streamer.handle(sampleBuffer)
         }
@@ -97,10 +105,12 @@ final class CameraModel {
             self?.pushEncoderSettings()
             self?.pushAudioSettings()
             self?.pushDeviceInfo()
+            self?.pushOverlays()
         }
         pushEncoderSettings()
         pushAudioSettings()
         pushDeviceInfo()
+        pushOverlays()
     }
 
     var settings: CaptureSettings { store.settings }
@@ -251,6 +261,27 @@ final class CameraModel {
             keyframeInterval: settings.keyframeInterval,
             frameRate: state.activeFrameRate
         ))
+    }
+
+    /// Preview-only aids: shader parameters, histogram sampling and the motion sensor run only when on.
+    private func pushOverlays() {
+        let settings = store.settings
+        frames.overlays = PreviewOverlays(
+            zebraThreshold: settings.zebraEnabled ? settings.zebraLevel.luma : 0,
+            peakingColor: settings.peakingEnabled ? settings.peakingColor.rgb : nil
+        )
+        histogramAnalyzer.setEnabled(settings.histogramEnabled)
+        if settings.levelEnabled { level.start() } else { level.stop() }
+    }
+
+    /// Full streamed frame on screen, for the grid.
+    func frameRect(in viewSize: CGSize) -> CGRect {
+        let resolution = state.activeResolution ?? store.settings.resolution
+        return PreviewGeometry.frameRect(
+            viewSize: viewSize,
+            bufferSize: CGSize(width: CGFloat(resolution.width), height: CGFloat(resolution.height)),
+            rotation: frames.previewRotation
+        )
     }
 
     private func pushAudioSettings() {

@@ -8,10 +8,19 @@ import Foundation
 
 /// Single-slot handoff from the capture queue to the preview renderer. The renderer always
 /// draws the newest frame; older ones are dropped.
+/// Preview-only overlay parameters for the shader.
+nonisolated struct PreviewOverlays: Equatable, Sendable {
+    /// Full-range luma; 0 = zebra off.
+    var zebraThreshold: Float = 0
+    /// nil = peaking off.
+    var peakingColor: SIMD3<Float>?
+}
+
 nonisolated final class FrameMailbox: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: CVPixelBuffer?
     private var rotation = 0
+    private var overlayState = PreviewOverlays()
     private var frozen = false
     private var awaitingFrame = false
 
@@ -45,6 +54,11 @@ nonisolated final class FrameMailbox: @unchecked Sendable {
             defer { pending = nil }
             return pending
         }
+    }
+
+    var overlays: PreviewOverlays {
+        get { lock.withLock { overlayState } }
+        set { lock.withLock { overlayState = newValue } }
     }
 
     /// Extra clockwise rotation (degrees) the preview applies to captured frames.

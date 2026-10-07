@@ -6,10 +6,16 @@
 import CoreVideo
 import MetalKit
 
+/// Must match `PreviewUniforms` in Preview.metal (48 bytes).
 private struct PreviewUniforms {
     var scale: SIMD2<Float>
     var quarterTurns: Int32
     var padding: Int32 = 0
+    var zebraThreshold: Float = 0
+    var peakingEnabled: Float = 0
+    var stripePhase: Float = 0
+    var padding2: Float = 0
+    var peakingColor: SIMD4<Float> = .zero
 }
 
 /// Draws the newest captured NV12 frame aspect-fill into an `MTKView` (edges past the screen are cropped). Rendering the same
@@ -23,7 +29,9 @@ final class PreviewRenderer: NSObject, MTKViewDelegate {
 
     private var currentBuffer: CVPixelBuffer?
     private var currentRotation = 0
+    private var currentOverlays = PreviewOverlays()
     private var needsRedraw = false
+    private var stripePhase: Float = 0
 
     init?(mailbox: FrameMailbox) {
         guard let device = MTLCreateSystemDefaultDevice(),
@@ -52,13 +60,16 @@ final class PreviewRenderer: NSObject, MTKViewDelegate {
 
     func draw(in view: MTKView) {
         let rotation = mailbox.previewRotation
+        let overlays = mailbox.overlays
         if let fresh = mailbox.take() {
             currentBuffer = fresh
-        } else if !needsRedraw && rotation == currentRotation {
+        } else if !needsRedraw && rotation == currentRotation && overlays == currentOverlays {
             return
         }
         needsRedraw = false
         currentRotation = rotation
+        currentOverlays = overlays
+        stripePhase = (stripePhase + 0.5).truncatingRemainder(dividingBy: 12)
 
         guard let buffer = currentBuffer,
               let luma = makeTexture(buffer, plane: 0, format: .r8Unorm),
@@ -71,11 +82,16 @@ final class PreviewRenderer: NSObject, MTKViewDelegate {
         let quarterTurns = ((rotation / 90) % 4 + 4) % 4
         var uniforms = PreviewUniforms(
             scale: aspectFillScale(buffer: buffer, quarterTurns: quarterTurns, drawableSize: view.drawableSize),
-            quarterTurns: Int32(quarterTurns)
+            quarterTurns: Int32(quarterTurns),
+            zebraThreshold: overlays.zebraThreshold,
+            peakingEnabled: overlays.peakingColor == nil ? 0 : 1,
+            stripePhase: stripePhase,
+            peakingColor: overlays.peakingColor.map { SIMD4($0, 1) } ?? .zero
         )
 
         encoder.setRenderPipelineState(pipeline)
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<PreviewUniforms>.stride, index: 0)
+        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<PreviewUniforms>.stride, index: 0)
         encoder.setFragmentTexture(CVMetalTextureGetTexture(luma), index: 0)
         encoder.setFragmentTexture(CVMetalTextureGetTexture(chroma), index: 1)
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)

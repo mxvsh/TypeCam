@@ -22,7 +22,7 @@ controls across the screen.
 │   tap = focus · hold = lock      │▌▌││
 │   pinch = zoom                   └──┘│
 ├──────────────────────────────────────┤
-│ ZOOM  FOCUS  EXPOSURE   WB   AUDIO   │  ← tabs show live values (1.4× · MF · ISO 400 · LOCK · −6 dB)
+│ ZOOM FOCUS EXPOSURE  WB  AUDIO ASSIST│  ← tabs show live values (1.4× · MF · ISO 400 · LOCK · −6 dB · 2 ON)
 │  ▔▔                                  │     tap or swipe to switch; content slides left/right
 │ [0.5×][1×][2×][4×]            [Flip] │  ← per-tab chips
 │ ┊ ┊ ┊ ┊ ┊ ┊ ┃ ┊ ┊ ┊ ┊ ┊ ┊   1.4×      │  ← ruler dial: drag to scrub, haptic tick per mark
@@ -37,6 +37,7 @@ controls across the screen.
 | Exposure | Auto · ISO *n* · 1/*n* (tapping ISO or shutter switches to Manual and selects that ruler), aperture readout | Auto: EV −2…+2 in 0.1 steps. Manual: ISO or shutter (log scale, shutter capped at one frame). |
 | WB | Auto · Lock cards | — |
 | Audio | Mute, live level meter | Input gain −12…+24 dB. If audio is off or not permitted, shows why, with a Turn On button. |
+| Assist | Tiles: Grid · Level · Histogram · Zebra · Peaking (tap to toggle) | — (zebra level and peaking colour are in Settings › Overlays) |
 
 Highlighted values (manual, locked, muted, non-zero EV) show in the accent colour in the tab and the chips.
 The selected tab is remembered between launches.
@@ -87,13 +88,15 @@ Auto bitrate (HEVC; H.264 = ×1.5): 720p30 4 · 720p60 6 · 1080p30 8 · 1080p60
 
 #### Overlays (preview only, never in the stream)
 
-| Setting | Options | Default |
-|---|---|---|
-| Grid | Off · Rule of thirds | Off |
-| Histogram | Off · Luma | Off |
-| Zebra stripes | Off · 70% · 80% · 90% · 100% | Off |
-| Focus peaking | Off · Red · Green · Blue · White | Off |
-| Level | Off · On (horizon line, snaps green at 0°) | Off |
+Quick toggles are in the deck's ASSIST tab. Settings › Overlays has the same toggles plus their options.
+
+| Setting | Options | Default | Implementation |
+|---|---|---|---|
+| Grid | On / Off | Off | Rule-of-thirds over the full streamed frame (`PreviewGeometry.frameRect`), so the lines match OBS framing even where aspect-fill crops the edges |
+| Level | On / Off | Off | Horizon from CoreMotion gravity (30 Hz, only while on); turns green with a light haptic within ±1° of the nearest upright orientation; hidden when the phone lies flat |
+| Histogram | On / Off | Off | Luma histogram (64 bins) from every 8th pixel/row of the Y plane, ~10 Hz, only while on; amber/red edge marks when shadows or highlights clip |
+| Zebra stripes | On / Off + level 70 · 80 · 90 · 100% | Off, 90% | Fragment shader: crawling diagonal stripes where luma ≥ level (100% = 0.98) |
+| Focus peaking | On / Off + Red · Green · Blue · White | Off, Red | Fragment shader: Sobel edges on luma at source texel spacing, blended in the chosen colour |
 
 #### Audio
 

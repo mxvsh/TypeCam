@@ -8,6 +8,19 @@ import CoreGraphics
 /// Inverse of the preview transform in `Preview.metal`: maps a point on screen to the captured
 /// frame, then to the device's point-of-interest space (sensor-native, unmirrored, 0…1).
 nonisolated enum PreviewGeometry {
+    /// Where the full captured frame lands on screen (aspect-fill, so it may extend past the edges).
+    static func frameRect(viewSize: CGSize, bufferSize: CGSize, rotation: Int) -> CGRect {
+        guard viewSize.width > 0, viewSize.height > 0, bufferSize.width > 0, bufferSize.height > 0 else {
+            return CGRect(origin: .zero, size: viewSize)
+        }
+        var width = bufferSize.width, height = bufferSize.height
+        if (((rotation / 90) % 4 + 4) % 4) % 2 == 1 { swap(&width, &height) }
+        let scale = max(viewSize.width / width, viewSize.height / height)
+        let size = CGSize(width: width * scale, height: height * scale)
+        return CGRect(x: (viewSize.width - size.width) / 2, y: (viewSize.height - size.height) / 2,
+                      width: size.width, height: size.height)
+    }
+
     /// Returns nil when the point lies outside the visible image.
     static func devicePoint(
         viewPoint: CGPoint,

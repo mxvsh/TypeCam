@@ -7,7 +7,7 @@ import AVFoundation
 import SwiftUI
 
 enum DeckTab: String, CaseIterable, Identifiable {
-    case zoom, focus, exposure, whiteBalance, audio
+    case zoom, focus, exposure, whiteBalance, audio, assist
 
     var id: Self { self }
 
@@ -18,6 +18,7 @@ enum DeckTab: String, CaseIterable, Identifiable {
         case .exposure: "EXPOSURE"
         case .whiteBalance: "WB"
         case .audio: "AUDIO"
+        case .assist: "ASSIST"
         }
     }
 }
@@ -78,7 +79,9 @@ struct ControlDeck: View {
                     VStack(spacing: 3) {
                         Text(item.title)
                             .font(.system(size: 10, weight: .bold))
-                            .kerning(0.6)
+                            .kerning(0.4)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                             .foregroundStyle(item == tab ? .white : Theme.secondaryText)
                         Text(value(for: item))
                             .font(.footnote.weight(.semibold))
@@ -102,7 +105,7 @@ struct ControlDeck: View {
                 .accessibilityAddTraits(item == tab ? .isSelected : [])
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 4)
         .sensoryFeedback(.selection, trigger: tab)
         .gesture(
             DragGesture(minimumDistance: 24).onEnded { drag in
@@ -137,6 +140,8 @@ struct ControlDeck: View {
             if settings.muted { return "MUTED" }
             let gain = Int(settings.inputGainDB)
             return gain == 0 ? "ON" : (gain > 0 ? "+\(gain) dB" : "\(gain) dB")
+        case .assist:
+            return activeAssists == 0 ? "OFF" : "\(activeAssists) ON"
         }
     }
 
@@ -146,6 +151,7 @@ struct ControlDeck: View {
         case .exposure: exposureManual || settings.exposureBias != 0
         case .whiteBalance: settings.whiteBalance == .locked
         case .audio: settings.muted
+        case .assist: activeAssists > 0
         case .zoom: false
         }
     }
@@ -160,6 +166,7 @@ struct ControlDeck: View {
         case .exposure: exposureControls
         case .whiteBalance: whiteBalanceControls
         case .audio: audioControls
+        case .assist: assistControls
         }
     }
 
@@ -306,6 +313,45 @@ struct ControlDeck: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// Preview-only aids. Zebra level and peaking colour live in Settings › Overlays.
+    private var assistControls: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                assistTile("Grid", systemImage: "grid", keyPath: \.gridEnabled)
+                assistTile("Level", systemImage: "level", keyPath: \.levelEnabled)
+                assistTile("Histogram", systemImage: "chart.bar.xaxis", keyPath: \.histogramEnabled)
+                assistTile("Zebra", systemImage: "line.diagonal", keyPath: \.zebraEnabled)
+                assistTile("Peaking", systemImage: "scope", keyPath: \.peakingEnabled)
+            }
+            hint("Overlays show on this screen only, never in OBS.")
+        }
+    }
+
+    private func assistTile(_ title: String, systemImage: String, keyPath: WritableKeyPath<CaptureSettings, Bool>) -> some View {
+        let on = settings[keyPath: keyPath]
+        return Button {
+            camera.store.settings[keyPath: keyPath].toggle()
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage).font(.system(size: 17, weight: .semibold))
+                Text(title).font(.system(size: 10, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(on ? Theme.accent : Theme.pillFill))
+            .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: on)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    private var activeAssists: Int {
+        [settings.gridEnabled, settings.levelEnabled, settings.histogramEnabled, settings.zebraEnabled, settings.peakingEnabled]
+            .filter { $0 }.count
     }
 
     // MARK: - Bottom row

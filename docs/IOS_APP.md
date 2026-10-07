@@ -14,7 +14,7 @@ reference #1 (grouped inset cards, blue accent, green→yellow→red meters).
 
 ```
 ┌──────────────────────────────────────┐
-│ TypeCam      4K · 60 · HEVC  ● LIVE 🔋│  ← status strip
+│ TypeCam        4K · 60 · HEVC   ●  🔋│  ← status strip
 │ ┌─────┐                        ┌──┐  │
 │ │FOCUS│                        │▌▌│  │  ← L/R audio meter (peak + hold)
 │ │ AE  │        preview         │▌▌│  │
@@ -29,24 +29,26 @@ reference #1 (grouped inset cards, blue accent, green→yellow→red meters).
 
 | Element | Behaviour |
 |---|---|
-| Status strip | Resolution · fps · codec. A connection chip shows *Waiting for OBS* (grey pulse), *Live* (red) or *Paused* (amber). Battery and thermal icons appear when the device is `.serious` or worse. Tap the chip for a telemetry sheet. |
+| Status strip | Resolution · fps · codec. A connection dot shows waiting (pulsing grey), live (red) or paused (amber). Battery and thermal icons appear when the device is `.serious` or worse. Tap the dot for a telemetry sheet. |
 | Left quick rail | **FOCUS** (Auto/Manual, opens a focus slider), **AE** (Auto/Manual, opens an EV bias or ISO/shutter dial), **WB** (Auto/Lock), **ISO** (current value, tap for the manual ISO dial). Active manual controls are highlighted in the accent colour. |
-| Preview | Tap to focus/expose at a point. Long-press for AE/AF lock (shows an "AE/AF LOCK" badge). Pinch to zoom. |
+| Preview | Full-screen aspect-fill, so the edges of the streamed frame may be cropped on screen. Tap to focus/expose at a point. Long-press for AE/AF lock (shows an "AE/AF LOCK" badge). Pinch to zoom. |
 | L/R meter | Post-gain, post-DSP peak meter with peak hold, -60…0 dBFS. Mono input shows one bar. Red when clipping. |
 | Histogram | Small luma histogram when enabled in Overlays. |
-| Lens pills | Built from the device's available lenses (0.5 / 1x / 2 / 3 / 5 etc.). Tap to switch, drag horizontally for a smooth zoom ramp. A flip button for the front camera sits at the pill row's end. |
+| Lens pills | Built from the device's available lenses (0.5 / 1x / 2 / 3 / 5 etc.). Tap to switch, drag horizontally for a smooth zoom ramp. A flip button for the front camera sits at the pill row's end. Flipping freezes and blurs the last frame and turns the preview like a card, and the new camera appears edge-on. |
 | Exposure readout | Live shutter, aperture (fixed per lens), ISO and WB mode. |
 | Stream-state button | Big centre button. **Waiting**: grey ring, disabled. **Live**: red filled ring, tap to pause. **Paused**: amber ring, tap to resume. While paused, preview continues but no media is sent. |
 | Dim button | Enters dim mode: the screen goes black with a tiny status line and the idle timer stays disabled. Tap anywhere to wake. |
 | Settings | Opens the settings sheet. |
 
-Rotation follows the device (via `AVCaptureDevice.RotationCoordinator`) unless orientation is locked. The UI
-counter-rotates its controls instead of relaying out, like the system Camera app.
+The UI is portrait-locked and counter-rotates its controls instead of re-laying them out, like the system
+Camera app. The stream's orientation follows the device (via `AVCaptureDevice.RotationCoordinator`) unless
+it is locked, and is sent to OBS as rotation metadata (see ARCHITECTURE.md).
 
 ### 2. Settings
 
-A navigation stack of grouped inset lists. Choices with 2–4 options use segmented pills (reference #2).
-Longer choices push a detail list. Values the current device or format can't do are hidden, never shown
+A navigation stack of grouped inset lists. Multiple-choice settings show their current value and push a
+checkmark list where each option has its full name and an optional subtitle (for example *4K · 3840 × 2160*).
+Toggles and sliders are inline. Values the current device or format can't do are hidden, never shown
 disabled-with-error.
 
 #### Video

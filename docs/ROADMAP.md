@@ -7,8 +7,8 @@ real device, and its docs are updated.
 
 | # | Milestone | Scope | Done when |
 |---|---|---|---|
-| M0 | Docs & scaffolding | Repo layout (`ios/`, `obs-plugin/`, `docs/`), template cleanup, iOS 18 target, v1 spec | ✅ this commit |
-| M1 | Capture & camera UI shell | Theme, `SettingsStore`, `CameraController` (virtual device, lens pills, zoom, flip, torch, rotation), Metal preview, camera screen layout, stream-state button (UI only), permissions | Live preview with lens switching on device |
+| M0 | Docs & scaffolding | Repo layout (`ios/`, `obs-plugin/`, `docs/`), template cleanup, iOS 18 target, v1 spec | ✅ |
+| M1 | Capture & camera UI shell | Theme, `SettingsStore`, `CameraController` (virtual device, lens pills, zoom, flip, torch, rotation), Metal preview, camera screen layout, stream-state button (UI only), permissions | ✅ |
 | M2 | Encode & transport (iOS) + `tools/typecam-recv` | `VideoEncoder` (H.264/HEVC, low-latency), `StreamServer` (7878, framing, backpressure, ping), `HELLO`/config/frames/state, mac CLI receiver | `typecam-recv` dumps a playable stream over USB, latency checked |
 | M3 | OBS plugin: video | Template setup, usbmux client, device monitor, source + properties, VT decode → async video, rotation, keyframe request, multi-device | Two phones as two OBS sources at 1080p60, under 100 ms |
 | M4 | Audio pipeline | `AudioController` (input/data source/polar pattern, gain, mute), low-cut, presets, meters, spectrum, AAC/PCM encode, plugin audio decode, A/V sync | Audio in OBS in sync. Audio settings screen complete. |

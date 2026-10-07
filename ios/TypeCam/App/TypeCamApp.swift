@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct TypeCamApp: App {
+    @State private var camera = CameraModel(store: SettingsStore())
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView(camera: camera)
                 .preferredColorScheme(.dark)
         }
     }

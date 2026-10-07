@@ -48,12 +48,21 @@ All modules live in the single `TypeCam` target, organized by folder:
 | `Encode/` | `VideoEncoder` (`VTCompressionSession`) and `AudioEncoder` (`AVAudioConverter` → AAC, or PCM passthrough) |
 | `Transport/` | `StreamServer` (`NWListener` on 7878), packet framing, send queue with backpressure, ping/telemetry |
 | `Settings/` | `SettingsStore`: `Codable` settings persisted to `UserDefaults`, plus device-capability clamping |
-| `Overlays/` | Metal shaders for histogram, zebra and focus peaking, applied to the preview only and never to the stream |
-| `UI/` | Camera screen, settings screens, theme, reusable controls (pills, segmented, meters) |
+| `Preview/` | `FrameMailbox` (newest-frame handoff from the capture queue) and `PreviewRenderer` (Metal: NV12 → RGB, rotation, aspect-fill) |
+| `Overlays/` | Metal shaders for histogram, zebra and focus peaking, applied to the preview only and never to the stream (M6) |
+| `UI/` | Camera screen, settings screens, theme, reusable controls (option pickers, meters) |
 
 **Concurrency:** the project uses `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`. Capture, audio, encode and
 transport work must run off the main actor, on dedicated serial queues or actors marked `nonisolated`
 where appropriate. Only UI state is main-actor.
+
+**Rotation:** frames always stay in the sensor's native landscape orientation
+(`connection.videoRotationAngle = 0`). Turning the phone never re-rotates the pipeline, never glitches the
+preview, and never restarts the encoder. `AVCaptureDevice.RotationCoordinator` provides the horizon-level
+angle. `CameraModel` applies the orientation lock to it and sends the result to OBS as
+`VIDEO_CONFIG.rotation`, which the plugin applies. The portrait-locked preview rotates by the coordinator's
+preview angle. With front-camera mirroring on, quarter-turn angles get an extra 180° so that the mirror
+reads left-right instead of upside down.
 
 **Video path:** `AVCaptureVideoDataOutput` (420f biplanar, `alwaysDiscardsLateVideoFrames = true`) sends
 each `CMSampleBuffer` to the encoder and, downsampled, to the Metal preview and overlays. The same buffer

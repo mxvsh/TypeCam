@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+build/
+
+# OBS plugin (CMake)
+obs-plugin/build*/
+obs-plugin/.deps/
+obs-plugin/release/

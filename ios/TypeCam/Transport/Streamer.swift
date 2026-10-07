@@ -36,6 +36,7 @@ nonisolated final class Streamer: @unchecked Sendable {
     private var rotation = 0
     private var frameRate = 30
     private var sentFormat: VideoFormat?
+    private var sentAudioFormat: AudioStreamFormat?
     private var awaitingKeyframe = true
     private var stats = StreamStats()
     private var windowFrames = 0
@@ -120,6 +121,18 @@ nonisolated final class Streamer: @unchecked Sendable {
         }
     }
 
+    /// Encoded audio from the audio pipeline (any thread). Audio is never dropped.
+    func handleAudio(_ audio: EncodedAudio) {
+        queue.async { [self] in
+            guard connected, !paused else { return }
+            if audio.format != sentAudioFormat {
+                server.send(.audioConfig, payload: Wire.json(audio.format.configJSON))
+                sentAudioFormat = audio.format
+            }
+            server.send(.audioFrame, pts: audio.pts, payload: audio.data)
+        }
+    }
+
     // MARK: - Stream queue
 
     private func handle(_ event: ServerEvent) {
@@ -127,6 +140,7 @@ nonisolated final class Streamer: @unchecked Sendable {
         case .connected:
             connected = true
             sentFormat = nil
+            sentAudioFormat = nil
             awaitingKeyframe = true
             stats.droppedFrames = 0
             server.send(.streamState, payload: Wire.json(["state": paused ? "paused" : "live"]))

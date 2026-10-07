@@ -36,6 +36,9 @@ nonisolated struct CameraState: Equatable, Sendable {
     var hasTorch = false
     var supportsStabilization = false
 
+    var audioActive = false
+    var audioRoute = AudioRouteState()
+
     var iso: Float = 0
     var exposureDuration: Double = 0
     var aperture: Float = 0

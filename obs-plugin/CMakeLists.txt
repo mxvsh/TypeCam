@@ -42,11 +42,12 @@ target_sources(
     src/usbmux.c
     src/device-registry.c
     src/vt-decoder.c
+    src/audio-decoder.c
 )
 
 target_link_libraries(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE "-framework CoreFoundation" "-framework CoreMedia" "-framework CoreVideo" "-framework VideoToolbox"
+  PRIVATE "-framework CoreFoundation" "-framework CoreMedia" "-framework CoreVideo" "-framework VideoToolbox" "-framework AudioToolbox"
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

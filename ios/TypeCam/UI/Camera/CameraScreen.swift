@@ -33,6 +33,15 @@ struct CameraScreen: View {
                 QuickRail(iso: camera.state.iso, iconRotation: status.iconRotation)
                     .padding(.leading, 12)
                 Spacer()
+                if camera.state.audioActive {
+                    AudioMeterView(
+                        levels: camera.audioLevels,
+                        muted: camera.settings.muted,
+                        iconRotation: status.iconRotation,
+                        onToggleMute: camera.toggleMute
+                    )
+                    .padding(.trailing, 12)
+                }
             }
 
             if camera.isDimmed {

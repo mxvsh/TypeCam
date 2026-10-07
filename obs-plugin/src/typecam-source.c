@@ -3,6 +3,7 @@
  * tunnel to TCP 7878 through usbmuxd, HELLO, then demux the stream (docs/PROTOCOL.md).
  */
 
+#include "audio-decoder.h"
 #include "device-registry.h"
 #include "protocol.h"
 #include "usbmux.h"
@@ -56,6 +57,9 @@ struct typecam_source {
 	/* connection thread only */
 	int fd;
 	struct tc_decoder *decoder;
+	struct tc_audio_decoder *audio;
+	bool have_ts_offset;
+	uint64_t ts_offset;
 	uint8_t *payload;
 	size_t payload_capacity;
 	uint64_t rtt_ns;
@@ -314,6 +318,18 @@ static void send_host_stats(struct typecam_source *ctx)
 	obs_data_release(stats);
 }
 
+/* Phone PTS (host clock) → OBS clock. Set on the first media message of a session and shared by
+ * audio and video, so their relative timing — and therefore A/V sync — is preserved. */
+static uint64_t to_obs_time(struct typecam_source *ctx, uint64_t pts)
+{
+	if (!ctx->have_ts_offset) {
+		ctx->ts_offset = os_gettime_ns() - pts;
+		ctx->have_ts_offset = true;
+		tc_decoder_set_ts_offset(ctx->decoder, ctx->ts_offset);
+	}
+	return pts + ctx->ts_offset;
+}
+
 /* Runs one connected session until disconnect, stop or a settings change. */
 static void run_session(struct typecam_source *ctx)
 {
@@ -360,7 +376,17 @@ static void run_session(struct typecam_source *ctx)
 				if (!handle_video_config(ctx, ctx->payload, header.length))
 					send_message(ctx, TC_KEYFRAME_REQUEST, NULL, 0);
 				break;
+			case TC_AUDIO_CONFIG: {
+				char *json = bstrdup_n((const char *)ctx->payload, header.length);
+				tc_audio_decoder_configure(ctx->audio, json);
+				bfree(json);
+				break;
+			}
+			case TC_AUDIO_FRAME:
+				tc_audio_decoder_decode(ctx->audio, ctx->payload, header.length, to_obs_time(ctx, header.pts));
+				break;
 			case TC_VIDEO_FRAME:
+				to_obs_time(ctx, header.pts);
 				if (!tc_decoder_decode(ctx->decoder, ctx->payload, header.length, header.pts)) {
 					pthread_mutex_lock(&ctx->mutex);
 					ctx->dropped++;
@@ -432,6 +458,8 @@ static void *connection_thread(void *data)
 		ctx->fd = -1;
 		tc_registry_release(ctx);
 		tc_decoder_reset(ctx->decoder);
+		tc_audio_decoder_reset(ctx->audio);
+		ctx->have_ts_offset = false;
 		clear_frame_if_needed(ctx);
 		pthread_mutex_lock(&ctx->mutex);
 		ctx->connected_udid[0] = '\0';
@@ -475,6 +503,7 @@ static void *typecam_create(obs_data_t *settings, obs_source_t *source)
 	ctx->fd = -1;
 	pthread_mutex_init(&ctx->mutex, NULL);
 	ctx->decoder = tc_decoder_create(source);
+	ctx->audio = tc_audio_decoder_create(source);
 	strlcpy(ctx->status, "Starting…", sizeof(ctx->status));
 
 	typecam_update(ctx, settings);
@@ -492,6 +521,7 @@ static void typecam_destroy(void *data)
 		pthread_join(ctx->thread, NULL);
 	tc_registry_release(ctx);
 	tc_decoder_destroy(ctx->decoder);
+	tc_audio_decoder_destroy(ctx->audio);
 	bfree(ctx->payload);
 	pthread_mutex_destroy(&ctx->mutex);
 	bfree(ctx);
@@ -591,7 +621,7 @@ static bool keyframe_clicked(obs_properties_t *props, obs_property_t *property, 
 struct obs_source_info typecam_source_info = {
 	.id = "typecam_source",
 	.type = OBS_SOURCE_TYPE_INPUT,
-	.output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_DO_NOT_DUPLICATE,
+	.output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_AUDIO | OBS_SOURCE_DO_NOT_DUPLICATE,
 	.icon_type = OBS_ICON_TYPE_CAMERA,
 	.get_name = typecam_get_name,
 	.create = typecam_create,

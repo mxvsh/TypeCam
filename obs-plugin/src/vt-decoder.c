@@ -19,7 +19,6 @@ struct tc_decoder {
 	size_t pool_width;
 	size_t pool_height;
 
-	bool have_offset;
 	uint64_t ts_offset;
 	bool output_error;
 	uint32_t frames;
@@ -50,7 +49,11 @@ static void release_session(struct tc_decoder *decoder)
 void tc_decoder_reset(struct tc_decoder *decoder)
 {
 	release_session(decoder);
-	decoder->have_offset = false;
+}
+
+void tc_decoder_set_ts_offset(struct tc_decoder *decoder, uint64_t offset)
+{
+	decoder->ts_offset = offset;
 }
 
 void tc_decoder_destroy(struct tc_decoder *decoder)
@@ -165,12 +168,7 @@ static void decoder_output(void *refcon, void *frame_refcon, OSStatus status, VT
 	video_format_get_parameters_for_format(VIDEO_CS_709, VIDEO_RANGE_FULL, VIDEO_FORMAT_NV12, frame.color_matrix,
 					       frame.color_range_min, frame.color_range_max);
 
-	/* Re-base the phone's host-clock PTS onto OBS's clock on the first frame. */
 	uint64_t pts_ns = (uint64_t)CMTimeConvertScale(pts, 1000000000, kCMTimeRoundingMethod_Default).value;
-	if (!decoder->have_offset) {
-		decoder->ts_offset = os_gettime_ns() - pts_ns;
-		decoder->have_offset = true;
-	}
 	frame.timestamp = pts_ns + decoder->ts_offset;
 
 	/* OBS copies the frame before returning. */

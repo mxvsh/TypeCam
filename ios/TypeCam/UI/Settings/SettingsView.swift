@@ -19,6 +19,13 @@ struct SettingsView: View {
             List {
                 videoSection
                 lensSection
+                Section {
+                    NavigationLink {
+                        AudioSettingsView(camera: camera)
+                    } label: {
+                        LabeledContent("Audio", value: audioSummary)
+                    }
+                }
                 displaySection
                 Section {
                     NavigationLink("Connection & About") { AboutView(store: camera.store) }
@@ -185,6 +192,13 @@ struct SettingsView: View {
 
     private func lens(_ active: LensOption) -> Binding<LensOption> {
         Binding(get: { active }, set: { camera.selectLens($0) })
+    }
+
+    private var audioSummary: String {
+        let settings = store.settings
+        guard settings.sendAudio else { return "Off" }
+        if settings.muted { return "Muted" }
+        return "\(settings.audioFormat == .pcm ? "PCM" : "AAC") · \(settings.stereo ? "Stereo" : "Mono")"
     }
 
     private var autoBitrate: Double {

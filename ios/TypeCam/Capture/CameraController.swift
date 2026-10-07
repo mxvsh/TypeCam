@@ -7,9 +7,12 @@ import AVFoundation
 
 /// Owns the `AVCaptureSession`. All session and device work runs on `sessionQueue`;
 /// frames are delivered on `videoQueue`. Never touches the main actor.
-nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate,
+    AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
     /// Called on the video queue for every captured frame. Set before `start`.
     var frameHandler: (@Sendable (CMSampleBuffer) -> Void)?
+    /// Called on the audio queue for every captured audio buffer. Set before `start`.
+    var audioHandler: (@Sendable (CMSampleBuffer) -> Void)?
     /// Called on the session queue whenever the published state changes. Set before `start`.
     var stateHandler: (@Sendable (CameraState) -> Void)?
     /// Called on the session queue after the active capture device changes. Set before `start`.
@@ -19,6 +22,10 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
     private let sessionQueue = DispatchQueue(label: "app.typecam.session")
     private let videoQueue = DispatchQueue(label: "app.typecam.video", qos: .userInteractive)
     private let videoOutput = AVCaptureVideoDataOutput()
+    private let audioQueue = DispatchQueue(label: "app.typecam.audio", qos: .userInteractive)
+    private let audioOutput = AVCaptureAudioDataOutput()
+    private var audioInput: AVCaptureDeviceInput?
+    private var microphoneAuthorized = false
 
     // Session-queue state.
     private var videoInput: AVCaptureDeviceInput?
@@ -66,6 +73,12 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
             settings = newSettings
             guard videoInput != nil else { return }
 
+            if Self.audioRoutingChanged(old, newSettings) {
+                session.beginConfiguration()
+                applyAudio()
+                session.commitConfiguration()
+            }
+
             if newSettings.cameraPosition != old.cameraPosition {
                 session.beginConfiguration()
                 installInput(for: newSettings.cameraPosition)
@@ -81,6 +94,18 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
                     applyTorch()
                 }
             }
+            publish()
+        }
+    }
+
+    func setMicrophoneAuthorized(_ authorized: Bool) {
+        sessionQueue.async { [self] in
+            guard authorized != microphoneAuthorized else { return }
+            microphoneAuthorized = authorized
+            guard videoInput != nil else { return }
+            session.beginConfiguration()
+            applyAudio()
+            session.commitConfiguration()
             publish()
         }
     }
@@ -126,6 +151,34 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
         }
 
         installInput(for: settings.cameraPosition)
+        applyAudio()
+    }
+
+    /// Mic input on the same session as video: same host clock, ~20 ms buffers.
+    private func applyAudio() {
+        if settings.sendAudio && microphoneAuthorized {
+            state.audioRoute = AudioRouting.configure(settings)
+            if audioInput == nil,
+               let mic = AVCaptureDevice.default(for: .audio),
+               let input = try? AVCaptureDeviceInput(device: mic),
+               session.canAddInput(input) {
+                session.addInput(input)
+                audioInput = input
+            }
+            if !session.outputs.contains(audioOutput), session.canAddOutput(audioOutput) {
+                audioOutput.setSampleBufferDelegate(self, queue: audioQueue)
+                session.addOutput(audioOutput)
+            }
+        } else if let audioInput {
+            session.removeInput(audioInput)
+            self.audioInput = nil
+        }
+        state.audioActive = audioInput != nil
+    }
+
+    private static func audioRoutingChanged(_ a: CaptureSettings, _ b: CaptureSettings) -> Bool {
+        a.sendAudio != b.sendAudio || a.audioInputID != b.audioInputID || a.micPosition != b.micPosition
+            || a.polarPattern != b.polarPattern || a.sampleRate != b.sampleRate || a.stereo != b.stereo
     }
 
     private func input(for position: CameraPosition) -> AVCaptureDeviceInput? {
@@ -289,6 +342,15 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
                      AVCaptureSession.runtimeErrorNotification] {
             observers.append(center.addObserver(forName: name, object: session, queue: nil, using: update))
         }
+        // Headphones/Bluetooth mics coming and going change the available inputs.
+        observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: nil) { [weak self] _ in
+            guard let self else { return }
+            sessionQueue.async {
+                guard self.audioInput != nil else { return }
+                self.state.audioRoute = AudioRouting.currentState()
+                self.publish()
+            }
+        })
     }
 
     /// ISO and shutter change continuously in auto exposure; poll them for the readout.
@@ -316,7 +378,11 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
     // MARK: - Frames
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        frameHandler?(sampleBuffer)
+        if output === audioOutput {
+            audioHandler?(sampleBuffer)
+        } else {
+            frameHandler?(sampleBuffer)
+        }
     }
 
     // MARK: - Device discovery

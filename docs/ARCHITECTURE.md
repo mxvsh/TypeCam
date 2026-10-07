@@ -8,7 +8,7 @@
 │ AVCaptureSession ──► VideoEncoder (VT)   │          │  usbmux ListDevices (1 Hz poll)      │
 │   video frames        H.264 / HEVC       │          │        │ attach/detach (UDID)        │
 │                           │              │          │        ▼                             │
-│ AVAudioEngine ──► DSP ──► AudioEncoder   │          │  TypeCam source (one per OBS source) │
+│ Audio output ──► DSP ──► AudioEncoder    │          │  TypeCam source (one per OBS source) │
 │   mic          lowcut/    AAC or PCM     │          │   usbmuxd Connect(UDID, 7878)        │
 │                preset/gain    │          │          │        │                             │
 │                           ▼   ▼          │   USB    │        ▼                             │
@@ -29,8 +29,8 @@
 | Who listens | **Phone** is the server, plugin is the client | usbmuxd can only open connections *to* a device port. |
 | Port | `7878` (device side) | Fixed and documented. Not configurable in v1. |
 | Video | VideoToolbox hardware H.264 or HEVC, real-time, **no B-frames** | Low latency. Hardware decode on every supported Mac. |
-| Audio | 48 kHz AAC-LC or raw PCM s16, mono/stereo | PCM has zero codec delay and the cable has bandwidth to spare. AAC is available to keep bitrate down. |
-| Clock | Capture PTS on host time (`mach_absolute_time` → ns) | AVCaptureSession and AVAudioEngine both use the host clock, so A/V stay in sync. The plugin re-bases PTS to `os_gettime_ns()` on first frame. |
+| Audio | 48 kHz PCM s16 (default) or AAC-LC, mono/stereo | PCM has zero codec delay and the cable has bandwidth to spare (about 1.5 Mbps stereo). AAC adds about 45 ms of codec delay but cuts the bitrate. |
+| Clock | Capture PTS on host time (`mach_absolute_time` → ns) | Video and audio come from one capture session on the host clock. The plugin re-bases both with **one shared offset** to `os_gettime_ns()` (set on the first media message), so A/V sync needs no OBS offset. |
 | Latency target | **< 100 ms** glass-to-OBS at 1080p60 | Short GOP, real-time encoder, small queues, drop frames instead of buffering. |
 | Multi-device | Each OBS source picks a device by UDID | Two phones can be two cameras. |
 | Host OS | macOS only (v1) | Windows needs the Apple Mobile Device driver and Linux needs libimobiledevice. Both are deferred. |
@@ -44,8 +44,8 @@ All modules live in the single `TypeCam` target, organized by folder:
 |---|---|
 | `App/` | App entry, scene lifecycle, idle-timer and dim management |
 | `Capture/` | `CameraController`: session, virtual-device discovery, lens/zoom, focus/exposure/WB, torch, stabilization, rotation |
-| `Audio/` | `AudioController`: `AVAudioSession` routing (input device, data source, polar pattern), `AVAudioEngine` graph, gain, low-cut, presets, metering, FFT spectrum |
-| `Encode/` | `VideoEncoder` (`VTCompressionSession`) and `AudioEncoder` (`AVAudioConverter` → AAC, or PCM passthrough) |
+| `Audio/` | `AudioRouting` (`AVAudioSession` input, data source, polar pattern), `AudioDSP` (gain, presets, low-cut), `AudioPipeline` (conversion, metering, FFT spectrum → encoder) |
+| `Encode/` | `VideoEncoder` (`VTCompressionSession`) and `AudioEncoder` (PCM s16le, or AAC-LC via `AVAudioConverter`) |
 | `Transport/` | `Wire` (framing, mirrors `protocol.h`), `StreamServer` (`NWListener` on loopback 7878, handshake, heartbeat), `Streamer` (capture → encoder → server policy: config, keyframes, backpressure, pause) |
 | `Settings/` | `SettingsStore`: `Codable` settings persisted to `UserDefaults`, plus device-capability clamping |
 | `Preview/` | `FrameMailbox` (newest-frame handoff from the capture queue) and `PreviewRenderer` (Metal: NV12 → RGB, rotation, aspect-fill) |
@@ -68,10 +68,15 @@ reads left-right instead of upside down.
 each `CMSampleBuffer` to the encoder and, downsampled, to the Metal preview and overlays. The same buffer
 feeds both, so the preview shows exactly what is streamed.
 
-**Audio path:** the capture session does not own the mic
-(`automaticallyConfiguresApplicationAudioSession = false`). `AVAudioEngine` input runs through
-gain → low-cut → preset EQ/compressor (`AVAudioUnitEQ`, `AVAudioUnitEffect`) → a tap that feeds
-metering, FFT and the encoder.
+**Audio path:** the mic is an `AVCaptureDeviceInput` on the **same capture session** as video, read with
+`AVCaptureAudioDataOutput`. Its buffers are about 20 ms long and stamped on the same host clock as video. An
+`AVAudioEngine` tap was ruled out because taps deliver at least 100 ms per buffer. `AudioRouting` configures
+`AVAudioSession` itself (`automaticallyConfiguresApplicationAudioSession = false`): `playAndRecord` with the
+default mode, Bluetooth HFP, and Bluetooth high-quality recording on iOS 26+, plus the preferred input, data
+source and polar pattern. `AudioPipeline` converts to float at the target rate and channel count, runs `AudioDSP`
+(gain → preset EQ/compressor → low-cut, hand-written biquads), meters peaks, computes a vDSP FFT spectrum
+(only while the Audio screen is open), and hands off to `AudioEncoder` (PCM s16le, or AAC-LC via
+`AVAudioConverter`, with priming-corrected timestamps).
 
 ## OBS plugin modules
 
@@ -81,7 +86,7 @@ metering, FFT and the encoder.
 | `device-registry.c` | Process-wide UDID claims (one source per iPhone) and cached device names |
 | `typecam-source.c` | `obs_source_info` registration, properties, per-source connection thread, demux |
 | `vt-decoder.c` | `VTDecompressionSession` for H.264/HEVC, `VTPixelRotationSession` rotation, NV12 `obs_source_frame` output |
-| `audio-decoder.c` (M4) | AAC → float planar via `AudioConverter`. PCM is passed through. |
+| `audio-decoder.c` | PCM s16le passed straight to `obs_source_output_audio`; AAC-LC decoded to float via `AudioConverter` |
 
 ## Failure handling
 

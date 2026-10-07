@@ -15,6 +15,9 @@ final class CameraModel {
     private(set) var authorization = AVCaptureDevice.authorizationStatus(for: .video)
     private(set) var streamState: StreamState = .waiting
     private(set) var streamStats = StreamStats()
+    private(set) var microphoneAuthorization = AVCaptureDevice.authorizationStatus(for: .audio)
+    private(set) var audioLevels = AudioLevels()
+    private(set) var spectrum: [Float] = Array(repeating: 0, count: SpectrumAnalyzer.bandCount)
     /// True from a flip tap until the new camera's first frame is on screen.
     private(set) var isSwitchingCamera = false
     /// Increments per flip; drives the flip animation.
@@ -28,6 +31,7 @@ final class CameraModel {
 
     @ObservationIgnored private let controller = CameraController()
     @ObservationIgnored private let streamer = Streamer()
+    @ObservationIgnored private let audio = AudioPipeline()
     @ObservationIgnored private var started = false
     @ObservationIgnored private var device: AVCaptureDevice?
     @ObservationIgnored private weak var previewLayer: CALayer?
@@ -48,6 +52,15 @@ final class CameraModel {
             Task { @MainActor in self.isSwitchingCamera = false }
         }
         let streamer = streamer
+        let audio = audio
+        controller.audioHandler = { sampleBuffer in audio.process(sampleBuffer) }
+        audio.outputHandler = { encoded in streamer.handleAudio(encoded) }
+        audio.levelsHandler = { [unowned self] levels in
+            Task { @MainActor in self.audioLevels = levels }
+        }
+        audio.spectrumHandler = { [unowned self] bands in
+            Task { @MainActor in self.spectrum = bands }
+        }
         controller.frameHandler = { sampleBuffer in
             if let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) {
                 frames.put(pixels)
@@ -74,9 +87,11 @@ final class CameraModel {
             self?.controller.update(settings)
             self?.updateRotation()
             self?.pushEncoderSettings()
+            self?.pushAudioSettings()
             self?.pushDeviceInfo()
         }
         pushEncoderSettings()
+        pushAudioSettings()
         pushDeviceInfo()
     }
 
@@ -93,6 +108,12 @@ final class CameraModel {
         started = true
         controller.start(with: store.settings)
         streamer.start()
+
+        if microphoneAuthorization == .notDetermined {
+            _ = await AVCaptureDevice.requestAccess(for: .audio)
+            microphoneAuthorization = AVCaptureDevice.authorizationStatus(for: .audio)
+        }
+        controller.setMicrophoneAuthorized(microphoneAuthorization == .authorized)
     }
 
     func resume() {
@@ -149,6 +170,15 @@ final class CameraModel {
         }
     }
 
+    func toggleMute() {
+        store.settings.muted.toggle()
+    }
+
+    /// The spectrum costs an FFT per buffer, so it only runs while the Audio screen is visible.
+    func setSpectrumVisible(_ visible: Bool) {
+        audio.setSpectrumEnabled(visible)
+    }
+
     /// Name shown in OBS: the user's choice, else the system name.
     var deviceName: String {
         let custom = store.settings.deviceName.trimmingCharacters(in: .whitespaces)
@@ -168,6 +198,21 @@ final class CameraModel {
             bitrate: Int(mbps * 1_000_000),
             keyframeInterval: settings.keyframeInterval,
             frameRate: state.activeFrameRate
+        ))
+    }
+
+    private func pushAudioSettings() {
+        let settings = store.settings
+        audio.update(AudioPipelineSettings(
+            dsp: DSPSettings(
+                gainDB: Float(settings.inputGainDB),
+                muted: settings.muted,
+                preset: settings.audioPreset,
+                lowCut: settings.lowCut
+            ),
+            format: settings.audioFormat,
+            sampleRate: settings.sampleRate,
+            stereo: settings.stereo
         ))
     }
 

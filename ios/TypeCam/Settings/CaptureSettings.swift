@@ -62,6 +62,20 @@ nonisolated enum StabilizationMode: String, Codable, Sendable {
     case off, standard
 }
 
+nonisolated enum ControlMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case auto, manual
+
+    var id: Self { self }
+    var label: String { self == .auto ? "Auto" : "Manual" }
+}
+
+nonisolated enum WhiteBalanceMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case auto, locked
+
+    var id: Self { self }
+    var label: String { self == .auto ? "Auto" : "Locked" }
+}
+
 nonisolated enum CameraPosition: String, Codable, Sendable {
     case back, front
 }
@@ -159,6 +173,16 @@ nonisolated struct CaptureSettings: Codable, Equatable, Sendable {
     var stabilization: StabilizationMode = .off
     var torchOn = false
     var torchLevel: Float = 1
+    var focusMode: ControlMode = .auto
+    /// 0 = nearest, 1 = farthest.
+    var lensPosition: Float = 0.5
+    var exposureMode: ControlMode = .auto
+    /// EV bias in auto exposure.
+    var exposureBias: Float = 0
+    var manualISO: Float = 100
+    /// Seconds.
+    var manualShutter: Double = 1.0 / 60
+    var whiteBalance: WhiteBalanceMode = .auto
 
     // Audio
     var sendAudio = true
@@ -219,6 +243,13 @@ nonisolated struct CaptureSettings: Codable, Equatable, Sendable {
         stabilization = c.value(.stabilization, default: d.stabilization)
         torchOn = c.value(.torchOn, default: d.torchOn)
         torchLevel = c.value(.torchLevel, default: d.torchLevel)
+        focusMode = c.value(.focusMode, default: d.focusMode)
+        lensPosition = c.value(.lensPosition, default: d.lensPosition)
+        exposureMode = c.value(.exposureMode, default: d.exposureMode)
+        exposureBias = c.value(.exposureBias, default: d.exposureBias)
+        manualISO = c.value(.manualISO, default: d.manualISO)
+        manualShutter = c.value(.manualShutter, default: d.manualShutter)
+        whiteBalance = c.value(.whiteBalance, default: d.whiteBalance)
         sendAudio = c.value(.sendAudio, default: d.sendAudio)
         audioInputID = c.value(.audioInputID, default: d.audioInputID)
         micPosition = c.value(.micPosition, default: d.micPosition)

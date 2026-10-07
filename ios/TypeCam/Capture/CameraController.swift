@@ -17,6 +17,9 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
     var stateHandler: (@Sendable (CameraState) -> Void)?
     /// Called on the session queue after the active capture device changes. Set before `start`.
     var deviceHandler: (@Sendable (AVCaptureDevice) -> Void)?
+    /// Called on the session queue just before switching to another lens on the same side
+    /// (so the preview can freeze and blur over the cut). Set before `start`.
+    var lensSwitchHandler: (@Sendable () -> Void)?
 
     private let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "app.typecam.session")
@@ -29,11 +32,13 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
 
     // Session-queue state.
     private var videoInput: AVCaptureDeviceInput?
-    private var cachedInputs: [CameraPosition: AVCaptureDeviceInput] = [:]
+    private var cachedInputs: [String: AVCaptureDeviceInput] = [:]
+    private var lensesByPosition: [CameraPosition: [PhysicalLens]] = [:]
+    private var currentLens: PhysicalLens?
     private var settings = CaptureSettings()
     private var state = CameraState()
-    private var zoomMultiplier: CGFloat = 1
     private var exposureTimer: DispatchSourceTimer?
+    private var aeAfLocked = false
     private var observers: [NSObjectProtocol] = []
 
     private static let maxDisplayZoom: CGFloat = 15
@@ -50,8 +55,10 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
             startExposurePolling()
             state.isRunning = session.isRunning
             publish()
-            // Pre-build the other camera's input so the first flip doesn't pay for it.
-            _ = input(for: settings.cameraPosition == .back ? .front : .back)
+            // Pre-build every lens's input so lens switches and flips don't pay for it.
+            for position in [CameraPosition.back, .front] {
+                for lens in lenses(for: position) { _ = input(for: lens.device) }
+            }
         }
     }
 
@@ -79,9 +86,9 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
                 session.commitConfiguration()
             }
 
-            if newSettings.cameraPosition != old.cameraPosition {
+            if newSettings.cameraPosition != old.cameraPosition, let lens = lens(for: 1, position: newSettings.cameraPosition) {
                 session.beginConfiguration()
-                installInput(for: newSettings.cameraPosition)
+                install(lens, displayZoom: 1)
                 session.commitConfiguration()
             } else {
                 if newSettings.resolution != old.resolution || newSettings.frameRate != old.frameRate {
@@ -93,7 +100,44 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
                 if newSettings.torchOn != old.torchOn || newSettings.torchLevel != old.torchLevel {
                     applyTorch()
                 }
+                if Self.exposureFocusChanged(old, newSettings) {
+                    applyExposureFocus()
+                }
             }
+            publish()
+        }
+    }
+
+    /// Tap-to-focus/expose at `point` (sensor coordinates, 0…1). `lock` = AE/AF lock (long-press).
+    /// Manual focus or exposure stays manual.
+    func focus(at point: CGPoint, lock: Bool) {
+        sessionQueue.async { [self] in
+            guard let device = videoInput?.device, (try? device.lockForConfiguration()) != nil else { return }
+            defer { device.unlockForConfiguration() }
+            if !(settings.focusMode == .manual && state.supportsManualFocus), device.isFocusPointOfInterestSupported {
+                device.focusPointOfInterest = point
+                let mode: AVCaptureDevice.FocusMode = lock ? .autoFocus : .continuousAutoFocus
+                if device.isFocusModeSupported(mode) { device.focusMode = mode }
+            }
+            if !(settings.exposureMode == .manual && state.supportsManualExposure), device.isExposurePointOfInterestSupported {
+                device.exposurePointOfInterest = point
+                let mode: AVCaptureDevice.ExposureMode = lock ? .autoExpose : .continuousAutoExposure
+                if device.isExposureModeSupported(mode) { device.exposureMode = mode }
+            }
+            // Re-centre on scene changes, like the system Camera app, unless locked.
+            device.isSubjectAreaChangeMonitoringEnabled = !lock
+            aeAfLocked = lock
+            state.aeAfLocked = lock
+            publish()
+        }
+    }
+
+    /// Clears AE/AF lock and returns to continuous auto at the centre.
+    func resetFocus() {
+        sessionQueue.async { [self] in
+            aeAfLocked = false
+            state.aeAfLocked = false
+            recenter()
             publish()
         }
     }
@@ -110,13 +154,23 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
         }
     }
 
-    /// Zoom in user-facing units (0.5×, 1×, 2×…). `animated` ramps smoothly, as for lens taps.
+    /// Zoom in user-facing units (0.5×, 1×, 2×…). Crossing into another lens's range switches to
+    /// that physical camera; within a lens, `animated` ramps smoothly.
     func setDisplayZoom(_ displayZoom: CGFloat, animated: Bool) {
         sessionQueue.async { [self] in
-            guard let device = videoInput?.device else { return }
-            let factor = min(max(displayZoom / zoomMultiplier, device.minAvailableVideoZoomFactor), maxZoomFactor(device))
-            do {
-                try device.lockForConfiguration()
+            guard let current = currentLens else { return }
+            let zoom = min(max(displayZoom, state.minDisplayZoom), state.maxDisplayZoom)
+            guard let target = lens(for: zoom, position: settings.cameraPosition) else { return }
+
+            if target.device.uniqueID != current.device.uniqueID {
+                lensSwitchHandler?()
+                session.beginConfiguration()
+                install(target, displayZoom: zoom)
+                session.commitConfiguration()
+            } else {
+                let device = current.device
+                let factor = min(max(zoom / current.baseZoom, device.minAvailableVideoZoomFactor), maxZoomFactor(device))
+                guard (try? device.lockForConfiguration()) != nil else { return }
                 if animated {
                     device.ramp(toVideoZoomFactor: factor, withRate: Self.lensRampRate)
                 } else {
@@ -124,10 +178,8 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
                     device.videoZoomFactor = factor
                 }
                 device.unlockForConfiguration()
-            } catch {
-                return
+                state.displayZoom = factor * current.baseZoom
             }
-            state.displayZoom = factor * zoomMultiplier
             publish()
         }
     }
@@ -150,7 +202,9 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
             session.addOutput(videoOutput)
         }
 
-        installInput(for: settings.cameraPosition)
+        if let lens = lens(for: 1, position: settings.cameraPosition) {
+            install(lens, displayZoom: 1)
+        }
         applyAudio()
     }
 
@@ -181,17 +235,30 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
             || a.polarPattern != b.polarPattern || a.sampleRate != b.sampleRate || a.stereo != b.stereo
     }
 
-    private func input(for position: CameraPosition) -> AVCaptureDeviceInput? {
-        if let cached = cachedInputs[position] { return cached }
-        guard let device = Self.bestDevice(for: position),
-              let input = try? AVCaptureDeviceInput(device: device) else { return nil }
-        cachedInputs[position] = input
+    private func input(for device: AVCaptureDevice) -> AVCaptureDeviceInput? {
+        if let cached = cachedInputs[device.uniqueID] { return cached }
+        guard let input = try? AVCaptureDeviceInput(device: device) else { return nil }
+        cachedInputs[device.uniqueID] = input
         return input
     }
 
-    private func installInput(for position: CameraPosition) {
-        guard let input = input(for: position) else { return }
-        let device = input.device
+    private func lenses(for position: CameraPosition) -> [PhysicalLens] {
+        if let known = lensesByPosition[position] { return known }
+        let discovered = PhysicalLens.discover(position)
+        lensesByPosition[position] = discovered
+        return discovered
+    }
+
+    /// The lens covering `zoom`: the longest lens whose base zoom is at or below it.
+    private func lens(for zoom: CGFloat, position: CameraPosition) -> PhysicalLens? {
+        let lenses = lenses(for: position)
+        return lenses.last { $0.baseZoom <= zoom + 0.01 } ?? lenses.first
+    }
+
+    /// Physical lenses (not the virtual multi-camera) so manual ISO, shutter and focus work on every lens.
+    private func install(_ lens: PhysicalLens, displayZoom: CGFloat) {
+        guard let input = input(for: lens.device) else { return }
+        let device = lens.device
 
         let previous = videoInput
         if let previous { session.removeInput(previous) }
@@ -201,17 +268,21 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
         }
         session.addInput(input)
         videoInput = input
+        currentLens = lens
 
-        zoomMultiplier = device.displayVideoZoomFactorMultiplier
+        let position = settings.cameraPosition
+        let all = lenses(for: position)
         state.position = position
-        state.lenses = Self.lenses(for: device, multiplier: zoomMultiplier)
+        state.lenses = PhysicalLens.pills(for: all)
         state.hasTorch = device.hasTorch
         state.aperture = device.lensAperture
 
+        aeAfLocked = false
+        state.aeAfLocked = false
         applyFormat()
         applyConnection()
         applyTorch()
-        setZoomFactorImmediately(1 / zoomMultiplier) // start on the main (1×) lens
+        setZoomFactorImmediately(displayZoom / lens.baseZoom)
         deviceHandler?(device)
     }
 
@@ -259,9 +330,77 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
         state.availableFrameRates = rates
         state.activeResolution = resolution
         state.activeFrameRate = fps
-        state.minDisplayZoom = device.minAvailableVideoZoomFactor * zoomMultiplier
-        state.maxDisplayZoom = maxZoomFactor(device) * zoomMultiplier
-        state.displayZoom = device.videoZoomFactor * zoomMultiplier
+        let lenses = lenses(for: settings.cameraPosition)
+        let base = currentLens?.baseZoom ?? 1
+        state.minDisplayZoom = lenses.first?.baseZoom ?? 1
+        if let longest = lenses.last {
+            state.maxDisplayZoom = min(Self.maxDisplayZoom, longest.baseZoom * longest.device.activeFormat.videoMaxZoomFactor)
+        }
+        state.displayZoom = device.videoZoomFactor * base
+        applyExposureFocus() // limits depend on the format and frame rate
+    }
+
+    /// Focus, exposure and white balance from settings, clamped to the active format.
+    private func applyExposureFocus() {
+        guard let device = videoInput?.device else { return }
+        let format = device.activeFormat
+        let minShutter = format.minExposureDuration.seconds
+        let frame = device.activeVideoMaxFrameDuration.seconds
+        let maxShutter = max(minShutter, min(format.maxExposureDuration.seconds, frame > 0 ? frame : 1))
+        state.supportsManualFocus = device.isLockingFocusWithCustomLensPositionSupported
+        state.supportsManualExposure = device.isExposureModeSupported(.custom)
+        state.supportsWhiteBalanceLock = device.isWhiteBalanceModeSupported(.locked)
+        state.isoRange = format.minISO...max(format.minISO, format.maxISO)
+        state.shutterRange = minShutter...maxShutter
+        state.biasRange = device.minExposureTargetBias...device.maxExposureTargetBias
+
+        guard (try? device.lockForConfiguration()) != nil else { return }
+        defer { device.unlockForConfiguration() }
+
+        if settings.focusMode == .manual && state.supportsManualFocus {
+            device.setFocusModeLocked(lensPosition: min(max(settings.lensPosition, 0), 1))
+        } else if !aeAfLocked, device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+
+        if settings.exposureMode == .manual && state.supportsManualExposure {
+            let iso = min(max(settings.manualISO, state.isoRange.lowerBound), state.isoRange.upperBound)
+            let shutter = min(max(settings.manualShutter, minShutter), maxShutter)
+            device.setExposureModeCustom(duration: CMTime(seconds: shutter, preferredTimescale: 1_000_000_000), iso: iso)
+        } else {
+            if !aeAfLocked, device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            let bias = min(max(settings.exposureBias, state.biasRange.lowerBound), state.biasRange.upperBound)
+            device.setExposureTargetBias(bias)
+        }
+
+        let whiteBalance: AVCaptureDevice.WhiteBalanceMode = settings.whiteBalance == .locked ? .locked : .continuousAutoWhiteBalance
+        if device.isWhiteBalanceModeSupported(whiteBalance) {
+            device.whiteBalanceMode = whiteBalance
+        }
+    }
+
+    /// Continuous auto focus/exposure at the centre of the frame (manual modes untouched).
+    private func recenter() {
+        guard let device = videoInput?.device, (try? device.lockForConfiguration()) != nil else { return }
+        defer { device.unlockForConfiguration() }
+        let center = CGPoint(x: 0.5, y: 0.5)
+        if !(settings.focusMode == .manual && state.supportsManualFocus) {
+            if device.isFocusPointOfInterestSupported { device.focusPointOfInterest = center }
+            if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
+        }
+        if !(settings.exposureMode == .manual && state.supportsManualExposure) {
+            if device.isExposurePointOfInterestSupported { device.exposurePointOfInterest = center }
+            if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+        }
+        device.isSubjectAreaChangeMonitoringEnabled = false
+    }
+
+    private static func exposureFocusChanged(_ a: CaptureSettings, _ b: CaptureSettings) -> Bool {
+        a.focusMode != b.focusMode || a.lensPosition != b.lensPosition || a.exposureMode != b.exposureMode
+            || a.exposureBias != b.exposureBias || a.manualISO != b.manualISO
+            || a.manualShutter != b.manualShutter || a.whiteBalance != b.whiteBalance
     }
 
     private func applyConnection() {
@@ -306,11 +445,11 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
         } catch {
             return
         }
-        state.displayZoom = clamped * zoomMultiplier
+        state.displayZoom = clamped * (currentLens?.baseZoom ?? 1)
     }
 
     private func maxZoomFactor(_ device: AVCaptureDevice) -> CGFloat {
-        min(device.maxAvailableVideoZoomFactor, Self.maxDisplayZoom / zoomMultiplier)
+        min(device.maxAvailableVideoZoomFactor, Self.maxDisplayZoom / (currentLens?.baseZoom ?? 1))
     }
 
     // MARK: - Observation
@@ -342,6 +481,14 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
                      AVCaptureSession.runtimeErrorNotification] {
             observers.append(center.addObserver(forName: name, object: session, queue: nil, using: update))
         }
+        // After a tap-to-focus, drift back to centre when the scene changes.
+        observers.append(center.addObserver(forName: AVCaptureDevice.subjectAreaDidChangeNotification, object: nil, queue: nil) { [weak self] _ in
+            guard let self else { return }
+            sessionQueue.async {
+                guard !self.aeAfLocked else { return }
+                self.recenter()
+            }
+        })
         // Headphones/Bluetooth mics coming and going change the available inputs.
         observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: nil) { [weak self] _ in
             guard let self else { return }
@@ -362,9 +509,11 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
             guard let self, let device = videoInput?.device else { return }
             let iso = device.iso
             let duration = device.exposureDuration.seconds
-            guard iso != state.iso || duration != state.exposureDuration else { return }
+            let lens = device.lensPosition
+            guard iso != state.iso || duration != state.exposureDuration || lens != state.lensPosition else { return }
             state.iso = iso
             state.exposureDuration = duration
+            state.lensPosition = lens
             publish()
         }
         timer.resume()
@@ -384,32 +533,40 @@ nonisolated final class CameraController: NSObject, AVCaptureVideoDataOutputSamp
             frameHandler?(sampleBuffer)
         }
     }
+}
 
-    // MARK: - Device discovery
+/// One physical camera and the user-facing zoom it starts at (0.5× ultra-wide, 1× wide, 4× tele…).
+nonisolated struct PhysicalLens: @unchecked Sendable {
+    let device: AVCaptureDevice
+    let baseZoom: CGFloat
 
-    /// Prefer virtual multi-lens devices so zoom crosses lenses seamlessly, like the system Camera app.
-    static func bestDevice(for position: CameraPosition) -> AVCaptureDevice? {
-        let types: [AVCaptureDevice.DeviceType] = position == .back
-            ? [.builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera, .builtInWideAngleCamera]
-            : [.builtInWideAngleCamera]
-        let devices = AVCaptureDevice.DiscoverySession(
-            deviceTypes: types,
-            mediaType: .video,
-            position: position == .back ? .back : .front
-        ).devices
-        return types.lazy.compactMap { type in devices.first { $0.deviceType == type } }.first
+    /// Uses the virtual multi-camera only to learn each lens's base zoom, then returns its physical
+    /// constituents, which support custom exposure and lens position.
+    static func discover(_ position: CameraPosition) -> [PhysicalLens] {
+        let avPosition: AVCaptureDevice.Position = position == .back ? .back : .front
+        if position == .back {
+            let virtualTypes: [AVCaptureDevice.DeviceType] = [.builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera]
+            let virtuals = AVCaptureDevice.DiscoverySession(deviceTypes: virtualTypes, mediaType: .video, position: .back).devices
+            if let virtual = virtualTypes.lazy.compactMap({ type in virtuals.first { $0.deviceType == type } }).first {
+                let multiplier = virtual.displayVideoZoomFactorMultiplier
+                let factors = [virtual.minAvailableVideoZoomFactor]
+                    + virtual.virtualDeviceSwitchOverVideoZoomFactors.map { CGFloat(truncating: $0) }
+                return zip(virtual.constituentDevices, factors)
+                    .map { PhysicalLens(device: $0, baseZoom: ($1 * multiplier * 10).rounded() / 10) }
+                    .sorted { $0.baseZoom < $1.baseZoom }
+            }
+        }
+        let wide = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: avPosition)
+        return wide.map { [PhysicalLens(device: $0, baseZoom: 1)] } ?? []
     }
 
-    /// Lens pills: each physical lens's switch-over point, plus a 2× crop of the main lens when
-    /// no physical lens sits near 2×.
-    static func lenses(for device: AVCaptureDevice, multiplier: CGFloat) -> [LensOption] {
-        let factors = [device.minAvailableVideoZoomFactor]
-            + device.virtualDeviceSwitchOverVideoZoomFactors.map { CGFloat(truncating: $0) }
-        var zooms = factors.map { ($0 * multiplier * 10).rounded() / 10 }
-        if device.position == .back,
-           zooms.contains(1),
+    /// Lens pills: each lens's base zoom, plus a 2× crop of the main lens when no lens sits near 2×.
+    static func pills(for lenses: [PhysicalLens]) -> [LensOption] {
+        var zooms = lenses.map(\.baseZoom)
+        if let main = lenses.first(where: { $0.baseZoom == 1 }),
+           main.device.position == .back,
            !zooms.contains(where: { abs($0 - 2) < 0.5 }),
-           2 / multiplier <= device.maxAvailableVideoZoomFactor {
+           main.device.activeFormat.videoMaxZoomFactor >= 2 {
             zooms.append(2)
         }
         return Set(zooms).sorted().map(LensOption.init(displayZoom:))

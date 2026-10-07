@@ -9,40 +9,49 @@ no local recording. It has one job: send the best possible live feed to OBS.
 
 ### 1. Camera (main)
 
-Design: dark, technical "creator" style. The layout follows design reference #2 and the polish follows
-reference #1 (grouped inset cards, blue accent, green→yellow→red meters).
+Design: dark, technical "creator" style, with one **control deck** at the bottom for every adjustment
+(Blackmagic Camera / Halide pattern). It replaces the earlier floating rail and panels, which scattered the
+controls across the screen.
 
 ```
 ┌──────────────────────────────────────┐
-│ TypeCam        4K · 60 · HEVC   ●  🔋│  ← status strip
-│ ┌─────┐                        ┌──┐  │
-│ │FOCUS│                        │▌▌│  │  ← L/R audio meter (peak + hold)
-│ │ AE  │        preview         │▌▌│  │
-│ │ WB  │     (+ grid/zebra/     │LR│  │
-│ │ ISO │      peaking/level)    └──┘  │
-│ └─────┘  [histogram]                 │  ← left quick rail
-│         ( 0.5 )( 1x )( 2 )( 3 )      │  ← lens pills (available lenses only)
-│  1/120    f1.8    ISO 100    AWB 🔒   │  ← live exposure readout
-│  [ ☾ ]        (  ◉ LIVE  )      [⚙]  │  ← dim · stream-state · settings
+│ TypeCam        1080p · 30 · HEVC  ● 🔋│  ← status bar (dot = waiting / live / paused)
+│            [🔒 AE/AF LOCK]            │  ← only while locked; tap to unlock
+│                                  ┌──┐│
+│        preview (full screen)     │▌▌││  ← L/R meter (long-press = mute)
+│   tap = focus · hold = lock      │▌▌││
+│   pinch = zoom                   └──┘│
+├──────────────────────────────────────┤
+│ ZOOM  FOCUS  EXPOSURE   WB   AUDIO   │  ← tabs show live values (1.4× · MF · ISO 400 · LOCK · −6 dB)
+│  ▔▔                                  │     tap or swipe to switch; content slides left/right
+│ [0.5×][1×][2×][4×]            [Flip] │  ← per-tab chips
+│ ┊ ┊ ┊ ┊ ┊ ┊ ┃ ┊ ┊ ┊ ┊ ┊ ┊   1.4×      │  ← ruler dial: drag to scrub, haptic tick per mark
+│   ☾            ( ◉ )            ⚙    │  ← dim · stream · settings
 └──────────────────────────────────────┘
 ```
 
+| Deck tab | Chips | Ruler |
+|---|---|---|
+| Zoom | Lens chips (base zoom of each physical lens, plus a 2× crop of the main lens), Flip | Continuous zoom on a log scale; crossing a lens's base zoom switches to that lens |
+| Focus | Auto · Manual · Unlock (while AE/AF-locked) | Lens position, macro ↔ infinity. Dragging it in Auto switches to Manual. |
+| Exposure | Auto · ISO *n* · 1/*n* (tapping ISO or shutter switches to Manual and selects that ruler), aperture readout | Auto: EV −2…+2 in 0.1 steps. Manual: ISO or shutter (log scale, shutter capped at one frame). |
+| WB | Auto · Lock cards | — |
+| Audio | Mute, live level meter | Input gain −12…+24 dB. If audio is off or not permitted, shows why, with a Turn On button. |
+
+Highlighted values (manual, locked, muted, non-zero EV) show in the accent colour in the tab and the chips.
+The selected tab is remembered between launches.
+
 | Element | Behaviour |
 |---|---|
-| Status strip | Resolution · fps · codec. A connection dot shows waiting (pulsing grey), live (red) or paused (amber). Battery and thermal icons appear when the device is `.serious` or worse. Tap the dot for a telemetry sheet. |
-| Left quick rail | **FOCUS** (Auto/Manual, opens a focus slider), **AE** (Auto/Manual, opens an EV bias or ISO/shutter dial), **WB** (Auto/Lock), **ISO** (current value, tap for the manual ISO dial). Active manual controls are highlighted in the accent colour. |
-| Preview | Full-screen aspect-fill, so the edges of the streamed frame may be cropped on screen. Tap to focus/expose at a point. Long-press for AE/AF lock (shows an "AE/AF LOCK" badge). Pinch to zoom. |
-| L/R meter | Post-gain, post-DSP segmented peak meter with 1 s peak hold, -60…0 dBFS (yellow from -12, red from -6). Mono shows one bar. Long-press to mute. Hidden when audio is off. |
-| Histogram | Small luma histogram when enabled in Overlays. |
-| Lens pills | Built from the device's available lenses (0.5 / 1x / 2 / 3 / 5 etc.). Tap to switch, drag horizontally for a smooth zoom ramp. A flip button for the front camera sits at the pill row's end. Flipping freezes and blurs the last frame and turns the preview like a card, and the new camera appears edge-on. |
-| Exposure readout | Live shutter, aperture (fixed per lens), ISO and WB mode. |
-| Stream-state button | Big centre button. **Waiting**: grey ring, disabled. **Live**: red filled ring, tap to pause. **Paused**: amber ring, tap to resume. While paused, preview continues but no media is sent. |
-| Dim button | Enters dim mode: the screen goes black with a tiny status line and the idle timer stays disabled. Tap anywhere to wake. |
-| Settings | Opens the settings sheet. |
+| Status bar | Resolution · fps · codec. A connection dot shows waiting (pulsing grey), live (red) or paused (amber). Battery and thermal icons appear when the device is `.serious` or worse. |
+| Preview | Full-screen aspect-fill, so the edges of the streamed frame may be cropped on screen. Tap to focus/expose (yellow square; drifts back to centre when the scene changes). Long-press locks AE/AF. Manual focus or exposure isn't overridden by taps. Pinch to zoom. |
+| L/R meter | Post-DSP segmented peak meter with 1 s hold (yellow from −12, red from −6 dBFS). Long-press to mute. Hidden when audio is off. |
+| Stream button | Waiting: grey ring with a pulsing cable glyph, disabled. Live: red. Paused: amber pause glyph. Tap to pause or resume. |
+| Lens changes | Each lens is its own physical camera, so manual ISO, shutter and focus work everywhere. A lens change is a brief cut, covered by freezing and blurring the last frame. A camera flip uses a card-turn animation. |
 
-The UI is portrait-locked and counter-rotates its controls instead of re-laying them out, like the system
-Camera app. The stream's orientation follows the device (via `AVCaptureDevice.RotationCoordinator`) unless
-it is locked, and is sent to OBS as rotation metadata (see ARCHITECTURE.md).
+The UI is portrait-locked and counter-rotates the round buttons and meter labels instead of re-laying out.
+The stream's orientation follows the device (via `AVCaptureDevice.RotationCoordinator`) unless locked, and is
+sent to OBS as rotation metadata (see ARCHITECTURE.md).
 
 ### 2. Settings
 
@@ -71,8 +80,8 @@ Auto bitrate (HEVC; H.264 = ×1.5): 720p30 4 · 720p60 6 · 1080p30 8 · 1080p60
 |---|---|---|
 | Lens | available lens pills | 1x |
 | Stabilization | Off · Standard (Cinematic is excluded because it adds latency) | Off |
-| Focus mode | Auto (continuous) · Manual (lens position slider) | Auto |
-| Exposure mode | Auto (+ EV bias -2…+2) · Manual (ISO + shutter) | Auto |
+| Focus | Auto (continuous) · Manual (lens position, set from FOCUS on the camera screen). Shown when the camera supports it. | Auto |
+| Exposure | Auto (+ EV bias -2…+2) · Manual (ISO + shutter, clamped to the lens's range; shutter capped at one frame so the frame rate never drops). Switching to manual starts from the current auto values. | Auto |
 | White balance | Auto · Locked | Auto |
 | Torch | Off · On (+ level) (rear lenses only) | Off |
 

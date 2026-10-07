@@ -42,6 +42,17 @@ nonisolated struct CameraState: Equatable, Sendable {
     var iso: Float = 0
     var exposureDuration: Double = 0
     var aperture: Float = 0
+    var lensPosition: Float = 0.5
+
+    var supportsManualFocus = false
+    var supportsManualExposure = false
+    var supportsWhiteBalanceLock = false
+    var isoRange: ClosedRange<Float> = 25...3200
+    /// Seconds; the upper bound is capped at one frame so manual exposure never lowers the frame rate.
+    var shutterRange: ClosedRange<Double> = (1.0 / 8000)...(1.0 / 30)
+    var biasRange: ClosedRange<Float> = -2...2
+    /// Focus and exposure locked by a long-press on the preview.
+    var aeAfLocked = false
 
     /// The lens the current zoom sits on: the widest lens at or below the zoom.
     var activeLens: LensOption? {

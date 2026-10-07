@@ -18,6 +18,8 @@ final class CameraModel {
     private(set) var microphoneAuthorization = AVCaptureDevice.authorizationStatus(for: .audio)
     private(set) var audioLevels = AudioLevels()
     private(set) var spectrum: [Float] = Array(repeating: 0, count: SpectrumAnalyzer.bandCount)
+    /// Where the last tap-to-focus landed, in preview coordinates.
+    private(set) var focusIndicator: FocusIndicator?
     /// True from a flip tap until the new camera's first frame is on screen.
     private(set) var isSwitchingCamera = false
     /// Increments per flip; drives the flip animation.
@@ -40,6 +42,9 @@ final class CameraModel {
     @ObservationIgnored private var lastLandscapeAngle: CGFloat = 0
     @ObservationIgnored private var lastPortraitAngle: CGFloat = 90
     @ObservationIgnored private var switchStartedAt: ContinuousClock.Instant?
+    /// Earliest point the new camera may appear: the flip's edge-on moment, or immediately for a lens cut.
+    @ObservationIgnored private var switchMidpoint: Duration = .zero
+    @ObservationIgnored private var devicePosition: AVCaptureDevice.Position?
 
     /// The flip animation turns edge-on at this point; the new camera may appear from here on.
     private static let flipMidpoint: Duration = .milliseconds(180)
@@ -78,6 +83,9 @@ final class CameraModel {
         }
         streamer.statsHandler = { [unowned self] stats in
             Task { @MainActor in self.streamStats = stats }
+        }
+        controller.lensSwitchHandler = { [unowned self] in
+            Task { @MainActor in self.beginLensSwitch() }
         }
         controller.deviceHandler = { [unowned self] device in
             nonisolated(unsafe) let device = device
@@ -149,6 +157,7 @@ final class CameraModel {
         isSwitchingCamera = true
         flipCount += 1
         switchStartedAt = .now
+        switchMidpoint = Self.flipMidpoint
         frames.freeze()
         store.settings.cameraPosition = store.settings.cameraPosition == .back ? .front : .back
 
@@ -168,6 +177,49 @@ final class CameraModel {
         case .paused: streamer.setPaused(false)
         case .waiting: break
         }
+    }
+
+    // MARK: - Focus & exposure
+
+    /// Tap (or long-press to lock) at a point on the preview.
+    func focus(at viewPoint: CGPoint, in viewSize: CGSize, lock: Bool) {
+        let resolution = state.activeResolution ?? store.settings.resolution
+        guard let point = PreviewGeometry.devicePoint(
+            viewPoint: viewPoint,
+            viewSize: viewSize,
+            bufferSize: CGSize(width: CGFloat(resolution.width), height: CGFloat(resolution.height)),
+            rotation: frames.previewRotation,
+            mirrored: store.settings.cameraPosition == .front && store.settings.mirrorFront
+        ) else { return }
+        controller.focus(at: point, lock: lock)
+        focusIndicator = FocusIndicator(location: viewPoint, locked: lock)
+    }
+
+    func unlockFocus() {
+        controller.resetFocus()
+        focusIndicator = nil
+    }
+
+    func clearFocusIndicator(_ indicator: FocusIndicator) {
+        if focusIndicator?.id == indicator.id { focusIndicator = nil }
+    }
+
+    /// Switching to manual starts from the current auto value, so the image doesn't jump.
+    func setFocusMode(_ mode: ControlMode) {
+        if mode == .manual { store.settings.lensPosition = state.lensPosition }
+        store.settings.focusMode = mode
+    }
+
+    func setExposureMode(_ mode: ControlMode) {
+        if mode == .manual {
+            if state.iso > 0 { store.settings.manualISO = state.iso }
+            if state.exposureDuration > 0 { store.settings.manualShutter = state.exposureDuration }
+        }
+        store.settings.exposureMode = mode
+    }
+
+    func toggleWhiteBalanceLock() {
+        store.settings.whiteBalance = store.settings.whiteBalance == .auto ? .locked : .auto
     }
 
     func toggleMute() {
@@ -228,17 +280,36 @@ final class CameraModel {
 
     private func deviceDidChange(_ device: AVCaptureDevice) {
         self.device = device
-        lastLandscapeAngle = 0
-        lastPortraitAngle = 90
+        if device.position != devicePosition {
+            // Only a flip changes how angles map; a lens change on the same side keeps them.
+            devicePosition = device.position
+            lastLandscapeAngle = 0
+            lastPortraitAngle = 90
+        }
         rebuildRotationCoordinator()
         if isSwitchingCamera { resumePreviewAfterFlip() }
+    }
+
+    /// Lens cut on the same side: freeze and blur (no card flip) until the new lens delivers.
+    private func beginLensSwitch() {
+        guard !isSwitchingCamera else { return }
+        isSwitchingCamera = true
+        switchStartedAt = .now
+        switchMidpoint = .zero
+        frames.freeze()
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            guard isSwitchingCamera, switchMidpoint == .zero else { return }
+            frames.resume()
+            isSwitchingCamera = false
+        }
     }
 
     /// Unfreezes the preview no earlier than the flip's midpoint, so the new camera
     /// appears while the card is edge-on.
     private func resumePreviewAfterFlip() {
-        let elapsed = switchStartedAt.map { ContinuousClock.now - $0 } ?? Self.flipMidpoint
-        let wait = max(.zero, Self.flipMidpoint - elapsed)
+        let elapsed = switchStartedAt.map { ContinuousClock.now - $0 } ?? switchMidpoint
+        let wait = max(.zero, switchMidpoint - elapsed)
         let frames = frames
         Task {
             try? await Task.sleep(for: wait)

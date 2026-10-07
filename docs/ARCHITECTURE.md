@@ -43,7 +43,7 @@ All modules live in the single `TypeCam` target, organized by folder:
 | Folder | Responsibility |
 |---|---|
 | `App/` | App entry, scene lifecycle, idle-timer and dim management |
-| `Capture/` | `CameraController`: session, virtual-device discovery, lens/zoom, focus/exposure/WB, torch, stabilization, rotation |
+| `Capture/` | `CameraController`: session, physical-lens discovery (base zooms learned from the virtual multi-camera), lens/zoom switching, focus/exposure/WB (tap, AE/AF lock, manual), torch, stabilization |
 | `Audio/` | `AudioRouting` (`AVAudioSession` input, data source, polar pattern), `AudioDSP` (gain, presets, low-cut), `AudioPipeline` (conversion, metering, FFT spectrum → encoder) |
 | `Encode/` | `VideoEncoder` (`VTCompressionSession`) and `AudioEncoder` (PCM s16le, or AAC-LC via `AVAudioConverter`) |
 | `Transport/` | `Wire` (framing, mirrors `protocol.h`), `StreamServer` (`NWListener` on loopback 7878, handshake, heartbeat), `Streamer` (capture → encoder → server policy: config, keyframes, backpressure, pause) |
@@ -96,6 +96,8 @@ source and polar pattern. `AudioPipeline` converts to float at the target rate a
 - **Thermal pressure:** the phone reports `thermalState`. At `.serious` it shows a warning; at `.critical` it steps down fps/resolution and tells the user.
 
 ## Known platform constraints
+
+- The virtual multi-camera (Triple/Dual) doesn't support custom exposure, so TypeCam drives the **physical** lenses. Lens changes are a brief cut rather than a seamless glide.
 
 - iOS stops camera capture when the app is backgrounded or the screen locks. TypeCam keeps the idle timer disabled and offers a dim/blackout mode instead of locking.
 - The USB-C port carries the stream, so a **wired USB-C mic needs a hub** with pass-through. Bluetooth mics use HFP and are lower fidelity. AirPods high-quality recording is only available on iOS 26+ and is enabled conditionally.

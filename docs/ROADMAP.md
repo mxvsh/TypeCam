@@ -12,7 +12,7 @@ real device, and its docs are updated.
 | M2 | Encode & transport (iOS) | `VideoEncoder` (H.264/HEVC, low-latency), `StreamServer` (loopback 7878, framing, backpressure, ping), `Streamer` (config/frames/state policy), live stream-state button, "Name in OBS" setting | ✅ (verified over USB with a scratch client; end-to-end latency measured in M3) |
 | M3 | OBS plugin: video | Template setup, usbmux client, device registry, source + properties, VT decode → async video, rotation, keyframe request, multi-device, reconnect after lock/background | ✅ (single phone verified in OBS 32.0.2; two-phone and 1080p60 latency checks still to do) |
 | M4 | Audio pipeline | Mic on the capture session, `AudioRouting` (input/data source/polar pattern), DSP (gain, mute, presets, low-cut), meters, spectrum, PCM/AAC encode, plugin audio decode, shared-clock A/V sync | ✅ (PCM verified in OBS 32.0.2; AAC path built, lightly tested) |
-| M5 | Pro controls | Manual focus/exposure (ISO/shutter/EV), AE/AF lock, tap-to-focus, WB lock, left quick rail, exposure readout, stabilization | All Lens & Image settings work on device |
+| M5 | Pro controls + control deck | Physical lenses (manual exposure needs them), manual focus/ISO/shutter/EV, tap-to-focus, AE/AF lock, WB lock; bottom control deck with sliding tabs and ruler dials replaces the rail | ✅ |
 | M6 | Overlays | Grid, histogram, zebra, focus peaking, level (Metal, preview-only) | Overlays at 60 fps without affecting the stream |
 | M7 | Telemetry, power & polish | `DEVICE_STATUS`/`HOST_STATS`, telemetry sheet, dim/blackout and auto-dim, thermal step-down, onboarding/help, app icon, plugin `.pkg` signing/notarization | End-to-end v1 release candidate |
 

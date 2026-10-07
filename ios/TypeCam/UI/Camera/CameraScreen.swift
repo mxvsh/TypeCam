@@ -5,13 +5,16 @@
 
 import SwiftUI
 
-/// Main screen (layout in docs/IOS_APP.md). The UI is portrait-locked; icons counter-rotate
-/// with the device like the system Camera app.
+/// Main screen (layout in docs/IOS_APP.md): full-screen preview, slim status bar, audio meter,
+/// and the bottom control deck. The UI is portrait-locked; icons counter-rotate with the device.
 struct CameraScreen: View {
     @Bindable var camera: CameraModel
     @State private var status = DeviceStatus()
     @State private var showSettings = false
     @State private var pinchStartZoom: CGFloat?
+    @State private var previewSize: CGSize = .zero
+    @State private var lastTouch: CGPoint = .zero
+    @AppStorage("deckTab") private var deckTab: DeckTab = .zoom
 
     var body: some View {
         ZStack {
@@ -21,27 +24,35 @@ struct CameraScreen: View {
 
             VStack(spacing: 0) {
                 StatusStrip(format: formatSummary, streamState: camera.streamState, status: status)
+                if camera.state.aeAfLocked {
+                    lockBadge
+                }
                 Spacer()
                 if camera.state.isInterrupted {
                     interruptedBanner
                     Spacer()
                 }
-                controls
+                ControlDeck(
+                    camera: camera,
+                    tab: $deckTab,
+                    iconRotation: status.iconRotation,
+                    onDim: { withAnimation { camera.isDimmed = true } },
+                    onSettings: { showSettings = true }
+                )
             }
 
-            HStack {
-                QuickRail(iso: camera.state.iso, iconRotation: status.iconRotation)
-                    .padding(.leading, 12)
-                Spacer()
-                if camera.state.audioActive {
+            if camera.state.audioActive {
+                HStack {
+                    Spacer()
                     AudioMeterView(
                         levels: camera.audioLevels,
                         muted: camera.settings.muted,
                         iconRotation: status.iconRotation,
                         onToggleMute: camera.toggleMute
                     )
-                    .padding(.trailing, 12)
+                    .padding(.trailing, 10)
                 }
+                .padding(.bottom, 180)
             }
 
             if camera.isDimmed {
@@ -58,8 +69,7 @@ struct CameraScreen: View {
         }
     }
 
-    /// Live preview. A camera flip turns it like a card: blurred and frozen on the old camera
-    /// for the first half, edge-on swap, then the new camera as the blur clears.
+    /// Live preview. A camera flip turns it like a card; lens changes blur over the cut.
     private var preview: some View {
         ZStack {
             MetalPreviewView(mailbox: camera.frames) { camera.attachPreviewLayer($0) }
@@ -76,45 +86,36 @@ struct CameraScreen: View {
             CubicKeyframe(0, duration: 0.24)
         }
         .ignoresSafeArea()
-        .gesture(pinchToZoom)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { previewSize = $0 }
+        .overlay {
+            if let indicator = camera.focusIndicator {
+                FocusSquare(indicator: indicator, onExpire: camera.clearFocusIndicator)
+            }
+        }
+        .onTapGesture(coordinateSpace: .local) { location in
+            camera.focus(at: location, in: previewSize, lock: false)
+        }
+        .onLongPressGesture(minimumDuration: 0.5) {
+            camera.focus(at: lastTouch, in: previewSize, lock: true)
+        }
+        .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { lastTouch = $0.startLocation })
+        .simultaneousGesture(pinchToZoom)
     }
 
-    private var controls: some View {
-        VStack(spacing: 14) {
-            LensPills(
-                lenses: camera.state.lenses,
-                activeLens: camera.state.activeLens,
-                zoom: camera.state.displayZoom,
-                zoomRange: camera.state.minDisplayZoom...max(camera.state.minDisplayZoom, camera.state.maxDisplayZoom),
-                iconRotation: status.iconRotation,
-                onSelect: camera.selectLens,
-                onZoom: camera.setZoom,
-                onFlip: camera.flipCamera
-            )
-
-            ExposureReadout(
-                exposureDuration: camera.state.exposureDuration,
-                aperture: camera.state.aperture,
-                iso: camera.state.iso
-            )
-
-            HStack {
-                roundButton("moon.fill", label: "Dim screen") {
-                    withAnimation { camera.isDimmed = true }
-                }
-                Spacer()
-                StreamButton(state: camera.streamState, action: camera.toggleStreamPaused)
-                Spacer()
-                roundButton("gearshape.fill", label: "Settings") { showSettings = true }
-            }
-            .padding(.horizontal, 32)
+    private var lockBadge: some View {
+        Button(action: camera.unlockFocus) {
+            Label("AE/AF LOCK", systemImage: "lock.fill")
+                .font(.caption.weight(.bold))
+                .kerning(0.4)
+                .foregroundStyle(.black)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Theme.paused))
         }
-        .padding(.top, 12)
-        .padding(.bottom, 8)
-        .background(
-            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.8)], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea(edges: .bottom)
-        )
+        .buttonStyle(.plain)
+        .accessibilityHint("Unlocks focus and exposure")
+        .padding(.top, 4)
+        .transition(.scale.combined(with: .opacity))
     }
 
     private var interruptedBanner: some View {
@@ -123,20 +124,6 @@ struct CameraScreen: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(Capsule().fill(Theme.overlayPanel))
-    }
-
-    private func roundButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 48, height: 48)
-                .background(Circle().fill(Theme.overlayPanel))
-                .rotationEffect(status.iconRotation)
-                .animation(.spring(duration: 0.35), value: status.iconRotation)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
     }
 
     private var formatSummary: String {

@@ -117,6 +117,18 @@ struct SettingsView: View {
             if state.lenses.count > 1, let active = state.activeLens {
                 OptionPicker(title: "Lens", options: state.lenses, selection: lens(active), label: { $0.label + "×" })
             }
+            if state.supportsManualFocus {
+                OptionPicker(title: "Focus", options: ControlMode.allCases, selection: focusMode, label: \.label,
+                             footer: "Manual focus is adjusted from FOCUS on the camera screen.")
+            }
+            if state.supportsManualExposure {
+                OptionPicker(title: "Exposure", options: ControlMode.allCases, selection: exposureMode, label: \.label,
+                             footer: "ISO and shutter are adjusted from AE on the camera screen. Shutter is capped at one frame so the frame rate never drops.")
+            }
+            if state.supportsWhiteBalanceLock {
+                OptionPicker(title: "White Balance", options: WhiteBalanceMode.allCases,
+                             selection: setting(\.whiteBalance), label: \.label)
+            }
             if state.supportsStabilization {
                 Toggle("Stabilization", isOn: stabilization)
             }
@@ -181,6 +193,14 @@ struct SettingsView: View {
             get: { state.activeFrameRate },
             set: { store.settings.frameRate = $0 }
         )
+    }
+
+    private var focusMode: Binding<ControlMode> {
+        Binding(get: { store.settings.focusMode }, set: { camera.setFocusMode($0) })
+    }
+
+    private var exposureMode: Binding<ControlMode> {
+        Binding(get: { store.settings.exposureMode }, set: { camera.setExposureMode($0) })
     }
 
     private var stabilization: Binding<Bool> {

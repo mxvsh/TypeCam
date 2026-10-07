@@ -6,12 +6,23 @@
 import SwiftUI
 
 struct AboutView: View {
+    @Bindable var store: SettingsStore
+
     var body: some View {
         List {
-            Section("Connection") {
-                LabeledContent("Device", value: UIDevice.current.name)
-                LabeledContent("Port", value: "7878")
-                LabeledContent("Protocol", value: "v1")
+            Section {
+                LabeledContent("Name in OBS") {
+                    TextField(UIDevice.current.name, text: $store.settings.deviceName)
+                        .multilineTextAlignment(.trailing)
+                        .submitLabel(.done)
+                        .autocorrectionDisabled()
+                }
+                LabeledContent("Port", value: "\(Wire.port)")
+                LabeledContent("Protocol", value: "v\(Wire.protocolVersion)")
+            } header: {
+                Text("Connection")
+            } footer: {
+                Text("iOS only tells apps this phone is called \"\(UIDevice.current.name)\". Set a name to tell phones apart in OBS.")
             }
             Section {
                 VStack(alignment: .leading, spacing: 10) {

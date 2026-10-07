@@ -21,7 +21,7 @@ struct SettingsView: View {
                 lensSection
                 displaySection
                 Section {
-                    NavigationLink("Connection & About") { AboutView() }
+                    NavigationLink("Connection & About") { AboutView(store: camera.store) }
                 }
             }
             .listStyle(.insetGrouped)

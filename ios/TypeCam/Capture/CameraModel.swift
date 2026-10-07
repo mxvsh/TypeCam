@@ -5,6 +5,7 @@
 
 import AVFoundation
 import Observation
+import UIKit
 
 /// Main-actor façade over `CameraController` for the UI. Owns settings → camera wiring,
 /// rotation (via `AVCaptureDevice.RotationCoordinator`) and the stream-state button.
@@ -13,6 +14,7 @@ final class CameraModel {
     private(set) var state = CameraState()
     private(set) var authorization = AVCaptureDevice.authorizationStatus(for: .video)
     private(set) var streamState: StreamState = .waiting
+    private(set) var streamStats = StreamStats()
     /// True from a flip tap until the new camera's first frame is on screen.
     private(set) var isSwitchingCamera = false
     /// Increments per flip; drives the flip animation.
@@ -25,6 +27,7 @@ final class CameraModel {
     @ObservationIgnored let frames = FrameMailbox()
 
     @ObservationIgnored private let controller = CameraController()
+    @ObservationIgnored private let streamer = Streamer()
     @ObservationIgnored private var started = false
     @ObservationIgnored private var device: AVCaptureDevice?
     @ObservationIgnored private weak var previewLayer: CALayer?
@@ -44,13 +47,24 @@ final class CameraModel {
         frames.firstFrameHandler = { [unowned self] in
             Task { @MainActor in self.isSwitchingCamera = false }
         }
+        let streamer = streamer
         controller.frameHandler = { sampleBuffer in
             if let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) {
                 frames.put(pixels)
             }
+            streamer.handle(sampleBuffer)
         }
         controller.stateHandler = { [unowned self] state in
-            Task { @MainActor in self.state = state }
+            Task { @MainActor in
+                self.state = state
+                self.pushEncoderSettings()
+            }
+        }
+        streamer.stateHandler = { [unowned self] state in
+            Task { @MainActor in self.streamState = state }
+        }
+        streamer.statsHandler = { [unowned self] stats in
+            Task { @MainActor in self.streamStats = stats }
         }
         controller.deviceHandler = { [unowned self] device in
             nonisolated(unsafe) let device = device
@@ -59,7 +73,11 @@ final class CameraModel {
         store.onChange = { [weak self] settings in
             self?.controller.update(settings)
             self?.updateRotation()
+            self?.pushEncoderSettings()
+            self?.pushDeviceInfo()
         }
+        pushEncoderSettings()
+        pushDeviceInfo()
     }
 
     var settings: CaptureSettings { store.settings }
@@ -74,6 +92,7 @@ final class CameraModel {
         guard authorization == .authorized, !started else { return }
         started = true
         controller.start(with: store.settings)
+        streamer.start()
     }
 
     func resume() {
@@ -117,10 +136,40 @@ final class CameraModel {
 
     func toggleStreamPaused() {
         switch streamState {
-        case .live: streamState = .paused
-        case .paused: streamState = .live
+        case .live: streamer.setPaused(true)
+        case .paused: streamer.setPaused(false)
         case .waiting: break
         }
+    }
+
+    /// Name shown in OBS: the user's choice, else the system name.
+    var deviceName: String {
+        let custom = store.settings.deviceName.trimmingCharacters(in: .whitespaces)
+        return custom.isEmpty ? UIDevice.current.name : custom
+    }
+
+    // MARK: - Streaming
+
+    private func pushEncoderSettings() {
+        let settings = store.settings
+        let resolution = state.activeResolution ?? settings.resolution
+        let mbps = settings.bitrateAuto
+            ? settings.autoBitrateMbps(resolution: resolution, frameRate: state.activeFrameRate)
+            : settings.bitrateMbps
+        streamer.update(settings: EncoderSettings(
+            codec: settings.codec,
+            bitrate: Int(mbps * 1_000_000),
+            keyframeInterval: settings.keyframeInterval,
+            frameRate: state.activeFrameRate
+        ))
+    }
+
+    private func pushDeviceInfo() {
+        var system = utsname()
+        uname(&system)
+        let model = withUnsafeBytes(of: system.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+        streamer.setDeviceInfo(["device_name": deviceName, "model": model, "app_version": version])
     }
 
     // MARK: - Rotation
@@ -176,6 +225,7 @@ final class CameraModel {
         case .portrait: lastPortraitAngle
         }
         outputRotation = mirrorCorrected(capture)
+        streamer.setRotation(outputRotation)
         frames.previewRotation = mirrorCorrected(coordinator.videoRotationAngleForHorizonLevelPreview)
     }
 

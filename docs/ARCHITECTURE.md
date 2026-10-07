@@ -46,7 +46,7 @@ All modules live in the single `TypeCam` target, organized by folder:
 | `Capture/` | `CameraController`: session, virtual-device discovery, lens/zoom, focus/exposure/WB, torch, stabilization, rotation |
 | `Audio/` | `AudioController`: `AVAudioSession` routing (input device, data source, polar pattern), `AVAudioEngine` graph, gain, low-cut, presets, metering, FFT spectrum |
 | `Encode/` | `VideoEncoder` (`VTCompressionSession`) and `AudioEncoder` (`AVAudioConverter` → AAC, or PCM passthrough) |
-| `Transport/` | `StreamServer` (`NWListener` on 7878), packet framing, send queue with backpressure, ping/telemetry |
+| `Transport/` | `Wire` (framing, mirrors `protocol.h`), `StreamServer` (`NWListener` on loopback 7878, handshake, heartbeat), `Streamer` (capture → encoder → server policy: config, keyframes, backpressure, pause) |
 | `Settings/` | `SettingsStore`: `Codable` settings persisted to `UserDefaults`, plus device-capability clamping |
 | `Preview/` | `FrameMailbox` (newest-frame handoff from the capture queue) and `PreviewRenderer` (Metal: NV12 → RGB, rotation, aspect-fill) |
 | `Overlays/` | Metal shaders for histogram, zebra and focus peaking, applied to the preview only and never to the stream (M6) |
@@ -96,4 +96,5 @@ metering, FFT and the encoder.
 - iOS stops camera capture when the app is backgrounded or the screen locks. TypeCam keeps the idle timer disabled and offers a dim/blackout mode instead of locking.
 - The USB-C port carries the stream, so a **wired USB-C mic needs a hub** with pass-through. Bluetooth mics use HFP and are lower fidelity. AirPods high-quality recording is only available on iOS 26+ and is enabled conditionally.
 - Video stabilization adds latency (Cinematic modes significantly), so v1 offers only Off/Standard.
-- Verify in M2: whether `NWListener` on the device triggers the Local Network permission for usbmux-tunnelled connections. If it does, add `NSLocalNetworkUsageDescription`.
+- The listener binds to loopback only, so usbmux-tunnelled connections work without exposing a port on Wi-Fi.
+- iOS hides the real device name from apps (`UIDevice.name` returns "iPhone"), so the name shown in OBS is a user setting.

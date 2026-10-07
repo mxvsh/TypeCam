@@ -96,6 +96,10 @@ nonisolated struct CaptureSettings: Codable, Equatable, Sendable {
     // Display & power
     var dimStyle: DimStyle = .blackout
 
+    // Connection
+    /// Name shown in OBS's device list. Empty = the system device name.
+    var deviceName = ""
+
     static let frameRates = [24, 25, 30, 60]
     static let keyframeIntervals: [Double] = [0.5, 1, 2]
     static let bitrateRange: ClosedRange<Double> = 2...100
@@ -131,6 +135,7 @@ nonisolated struct CaptureSettings: Codable, Equatable, Sendable {
         torchOn = c.value(.torchOn, default: d.torchOn)
         torchLevel = c.value(.torchLevel, default: d.torchLevel)
         dimStyle = c.value(.dimStyle, default: d.dimStyle)
+        deviceName = c.value(.deviceName, default: d.deviceName)
     }
 }
 

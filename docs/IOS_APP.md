@@ -123,7 +123,7 @@ Presets (DSP chain after gain, before low-cut):
 
 #### About / Connection
 
-Device name (as shown in OBS), port 7878 (read-only), protocol version, app version, connection help
+**Name in OBS** (editable; defaults to the system name, which iOS reports only as "iPhone"), port 7878 (read-only), protocol version, app version, connection help
 ("Connect with a USB cable, tap *Trust* on the phone, add a *TypeCam* source in OBS").
 
 ## Telemetry sheet

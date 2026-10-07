@@ -6,7 +6,8 @@ backward-compatible.
 
 ## Connection
 
-1. The phone's app listens on TCP port **7878** whenever it is in the foreground.
+1. The phone's app listens on TCP port **7878**, bound to the device's **loopback** interface (usbmuxd delivers
+   tunnelled connections there, so the port is never exposed on Wi-Fi), whenever it is in the foreground.
 2. The plugin opens `/var/run/usbmuxd` and sends `Connect { DeviceID, PortNumber }`. The port must be in
    **network byte order** (`htons(7878)`). Once usbmuxd replies `Result = 0`, the Unix socket becomes a
    raw byte pipe to the phone.
@@ -21,7 +22,7 @@ Every message is a 16-byte header followed by `length` bytes of payload. All int
 
 | Offset | Size | Field | Notes |
 |---|---|---|---|
-| 0 | 2 | `magic` | `0x5443` (`"TC"`) |
+| 0 | 2 | `magic` | bytes `'T' 'C'` (u16 LE `0x4354`) |
 | 2 | 1 | `type` | see table below |
 | 3 | 1 | `flags` | bit 0 = keyframe (video), others reserved (0) |
 | 4 | 4 | `length` | payload bytes, max 8 MiB |
@@ -35,7 +36,7 @@ On a bad `magic` or an oversized `length`, the receiver closes the connection.
 |---|---|---|---|
 | `0x01` | `HELLO` | P→I | JSON: `{"protocol_version":1,"client":"obs-typecam","client_version":"1.0.0"}` |
 | `0x02` | `HELLO_ACK` | I→P | JSON: `{"protocol_version":1,"device_name":"Monawwar's iPhone","model":"iPhone17,1","app_version":"1.0.0","ok":true}`. On a version mismatch it sends `"ok":false,"error":"..."` and closes. |
-| `0x10` | `VIDEO_CONFIG` | I→P | see below. Sent before the first frame and again whenever the codec, resolution or parameter sets change. |
+| `0x10` | `VIDEO_CONFIG` | I→P | see below. Sent before the first keyframe and again whenever the codec, resolution, parameter sets or rotation change. A rotation-only change is not followed by a keyframe, so the plugin should keep its decoder if the parameter sets are unchanged. |
 | `0x11` | `VIDEO_FRAME` | I→P | One access unit in **AVCC** form (4-byte big-endian length-prefixed NAL units, as VideoToolbox emits them). `flags.keyframe` is set on IDR. |
 | `0x20` | `AUDIO_CONFIG` | I→P | JSON: `{"format":"aac"\|"pcm_s16le","sample_rate":48000,"channels":1\|2,"asc":"<base64 AudioSpecificConfig, aac only>"}` |
 | `0x21` | `AUDIO_FRAME` | I→P | AAC: one raw AAC-LC frame (no ADTS). PCM: interleaved s16le samples. `pts_ns` = time of the first sample. |
@@ -81,7 +82,8 @@ The plugin builds its `CMVideoFormatDescription` with
 - Keyframe interval defaults to 1 s (`MaxKeyFrameIntervalDuration`). Force an IDR on `KEYFRAME_REQUEST`, on a new client, and after any queue drop.
 - Send queue limit: about 3 video frames. On overflow, drop pending non-key frames and force an IDR.
 
-## Test vectors
+## Testing without OBS
 
-`tools/typecam-recv` (macOS CLI, added in M2) connects through usbmuxd, validates framing, and writes
-`out.h264|hevc` + `out.wav` so a stream can be checked with `ffplay` independently of OBS.
+With `libimobiledevice` installed, `iproxy 17878:7878` forwards a local port through usbmuxd. Any client
+that sends `HELLO`, answers `PING`, and converts AVCC to Annex B (4-byte length → `00 00 00 01`) can dump a
+stream for `ffprobe`/`ffplay`. M2 was verified this way: HEVC 1080p30, 30.0 fps, about 8.1 Mbps, one keyframe/s.

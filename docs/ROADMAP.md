@@ -10,7 +10,7 @@ real device, and its docs are updated.
 | M0 | Docs & scaffolding | Repo layout (`ios/`, `obs-plugin/`, `docs/`), template cleanup, iOS 18 target, v1 spec | ✅ |
 | M1 | Capture & camera UI shell | Theme, `SettingsStore`, `CameraController` (virtual device, lens pills, zoom, flip, torch, rotation), Metal preview, camera screen layout, stream-state button (UI only), permissions | ✅ |
 | M2 | Encode & transport (iOS) | `VideoEncoder` (H.264/HEVC, low-latency), `StreamServer` (loopback 7878, framing, backpressure, ping), `Streamer` (config/frames/state policy), live stream-state button, "Name in OBS" setting | ✅ (verified over USB with a scratch client; end-to-end latency measured in M3) |
-| M3 | OBS plugin: video | Template setup, usbmux client, device monitor, source + properties, VT decode → async video, rotation, keyframe request, multi-device | Two phones as two OBS sources at 1080p60, under 100 ms |
+| M3 | OBS plugin: video | Template setup, usbmux client, device registry, source + properties, VT decode → async video, rotation, keyframe request, multi-device, reconnect after lock/background | ✅ (single phone verified in OBS 32.0.2; two-phone and 1080p60 latency checks still to do) |
 | M4 | Audio pipeline | `AudioController` (input/data source/polar pattern, gain, mute), low-cut, presets, meters, spectrum, AAC/PCM encode, plugin audio decode, A/V sync | Audio in OBS in sync. Audio settings screen complete. |
 | M5 | Pro controls | Manual focus/exposure (ISO/shutter/EV), AE/AF lock, tap-to-focus, WB lock, left quick rail, exposure readout, stabilization | All Lens & Image settings work on device |
 | M6 | Overlays | Grid, histogram, zebra, focus peaking, level (Metal, preview-only) | Overlays at 60 fps without affecting the stream |

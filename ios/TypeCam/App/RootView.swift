@@ -23,7 +23,11 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             // Locking the phone stops capture, so never let it auto-lock while open.
             UIApplication.shared.isIdleTimerDisabled = phase == .active
-            if phase == .active { camera.resume() }
+            switch phase {
+            case .active: camera.resume()
+            case .background: camera.suspend()
+            default: break
+            }
         }
     }
 }

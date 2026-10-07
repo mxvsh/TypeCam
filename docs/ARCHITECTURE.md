@@ -5,7 +5,7 @@
 ```
  iPhone (TypeCam app)                                    Mac (OBS + obs-typecam)
 ┌──────────────────────────────────────────┐          ┌──────────────────────────────────────┐
-│ AVCaptureSession ──► VideoEncoder (VT)   │          │  DeviceMonitor (usbmuxd Listen)      │
+│ AVCaptureSession ──► VideoEncoder (VT)   │          │  usbmux ListDevices (1 Hz poll)      │
 │   video frames        H.264 / HEVC       │          │        │ attach/detach (UDID)        │
 │                           │              │          │        ▼                             │
 │ AVAudioEngine ──► DSP ──► AudioEncoder   │          │  TypeCam source (one per OBS source) │
@@ -77,16 +77,15 @@ metering, FFT and the encoder.
 
 | File / unit | Responsibility |
 |---|---|
-| `usbmux.c` | Client for the `/var/run/usbmuxd` Unix socket (plist protocol): `ListDevices`, `Listen`, `Connect` |
-| `device-monitor.c` | Process-wide attach/detach tracking shared by all sources |
-| `typecam-source.c` | `obs_source_info` registration, properties, lifecycle, connection thread |
-| `demux.c` | Parses TypeCam packets ([PROTOCOL.md](PROTOCOL.md)) |
-| `vt-decoder.mm` | `VTDecompressionSession` for H.264/HEVC producing NV12 `obs_source_frame`s |
-| `audio-decoder.mm` | AAC → float planar via `AudioConverter`. PCM is passed through. |
+| `usbmux.c` | Client for the `/var/run/usbmuxd` Unix socket (plist protocol): `ListDevices`, `Connect` |
+| `device-registry.c` | Process-wide UDID claims (one source per iPhone) and cached device names |
+| `typecam-source.c` | `obs_source_info` registration, properties, per-source connection thread, demux |
+| `vt-decoder.c` | `VTDecompressionSession` for H.264/HEVC, `VTPixelRotationSession` rotation, NV12 `obs_source_frame` output |
+| `audio-decoder.c` (M4) | AAC → float planar via `AudioConverter`. PCM is passed through. |
 
 ## Failure handling
 
-- **Cable pulled / app backgrounded:** the socket closes. The source keeps the last frame or goes transparent (a property), and the device monitor reconnects automatically when the device reappears or the app returns to the foreground.
+- **Cable pulled / app backgrounded:** the socket closes. The source keeps the last frame or goes transparent (a property), and the connection thread reconnects automatically when the device reappears or the app returns to the foreground.
 - **Decoder error or mid-stream join:** the plugin sends `KEYFRAME_REQUEST`. The phone forces an IDR.
 - **Congestion:** if the phone's send queue exceeds its limit, it drops non-key video frames until the next IDR and forces one. Audio is never dropped.
 - **Thermal pressure:** the phone reports `thermalState`. At `.serious` it shows a warning; at `.critical` it steps down fps/resolution and tells the user.

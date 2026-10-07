@@ -97,7 +97,14 @@ final class CameraModel {
 
     func resume() {
         authorization = AVCaptureDevice.authorizationStatus(for: .video)
-        if started { controller.resume() }
+        guard started else { return }
+        controller.resume()
+        streamer.resume()
+    }
+
+    func suspend() {
+        guard started else { return }
+        streamer.suspend()
     }
 
     func attachPreviewLayer(_ layer: CALayer) {

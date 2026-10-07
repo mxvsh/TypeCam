@@ -61,6 +61,16 @@ nonisolated final class Streamer: @unchecked Sendable {
         queue.async { [self] in startStatsTimer() }
     }
 
+    /// App backgrounded: iOS will suspend us and defunct our sockets, so close them cleanly.
+    func suspend() {
+        server.stop()
+    }
+
+    /// App foregrounded: listen again on a fresh socket.
+    func resume() {
+        server.start()
+    }
+
     // MARK: - Capture queue
 
     func handle(_ sampleBuffer: CMSampleBuffer) {
@@ -176,6 +186,7 @@ nonisolated final class Streamer: @unchecked Sendable {
     }
 
     private func startStatsTimer() {
+        guard statsTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 1, repeating: 1)
         timer.setEventHandler { [weak self] in

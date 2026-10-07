@@ -29,6 +29,7 @@ nonisolated final class StreamServer: @unchecked Sendable {
     private var lastReceive = Date.distantPast
     private var heartbeat: DispatchSourceTimer?
     private var restartPending = false
+    private var wantsListening = false
 
     /// Video frames handed to the network stack but not yet sent. Used for backpressure.
     private(set) var videoInFlight = 0
@@ -42,11 +43,27 @@ nonisolated final class StreamServer: @unchecked Sendable {
     // MARK: - Listener
 
     func start() {
-        queue.async { [self] in startListener() }
+        queue.async { [self] in
+            wantsListening = true
+            startListener()
+        }
+    }
+
+    /// Tears down the listener and any client. iOS defuncts sockets while the app is suspended,
+    /// so the app stops the server on background and starts a fresh one on foreground.
+    func stop() {
+        queue.async { [self] in
+            wantsListening = false
+            listener?.stateUpdateHandler = nil
+            listener?.newConnectionHandler = nil
+            listener?.cancel()
+            listener = nil
+            dropConnection(notify: true)
+        }
     }
 
     private func startListener() {
-        guard listener == nil else { return }
+        guard wantsListening, listener == nil else { return }
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = true
         parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: Wire.port)!)
@@ -60,12 +77,15 @@ nonisolated final class StreamServer: @unchecked Sendable {
         listener.newConnectionHandler = { [weak self] connection in
             self?.accept(connection)
         }
-        listener.stateUpdateHandler = { [weak self] state in
-            guard let self else { return }
-            if case .failed = state {
-                self.listener?.cancel()
+        listener.stateUpdateHandler = { [weak self, weak listener] state in
+            guard let self, let listener, listener === self.listener else { return }
+            switch state {
+            case .failed, .waiting:
+                listener.cancel()
                 self.listener = nil
                 self.scheduleRestart()
+            default:
+                break
             }
         }
         listener.start(queue: queue)

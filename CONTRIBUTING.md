@@ -64,6 +64,26 @@ cp -R build_macos/RelWithDebInfo/obs-typecam.plugin \
 If the first build after editing `CMakeLists.txt` fails at link time, run it again: the Xcode project was being
 regenerated.
 
+## Releasing the iOS app
+
+`scripts/release.sh` builds a signed App Store IPA. It asks whether the release is a patch, minor or major
+update (or `keep` to re-upload the same version), then bumps `ios/Config/Version.xcconfig` and archives.
+It exports the IPA to `build/release/`, and finally offers to commit the bump and tag it `ios/vX.Y.Z`.
+
+```sh
+scripts/release.sh                 # interactive
+scripts/release.sh patch           # no prompt
+scripts/release.sh minor --upload  # upload straight to App Store Connect instead of exporting
+```
+
+Upload the IPA with Transporter, or use `--upload`. You need your team set in `Local.xcconfig` (or
+`DEVELOPMENT_TEAM=… scripts/release.sh`) and your Apple account signed in under **Xcode › Settings › Accounts**.
+If the build fails, the version file is restored. Don't edit the version in Xcode's **General** tab: that writes
+it into `project.pbxproj`, where it overrides `Version.xcconfig`.
+
+The script isn't tied to TypeCam. Set `PROJECT`, `SCHEME`, `VERSION_FILE` and `TAG_PREFIX` to use it with
+another Xcode project. See the header of the script for details.
+
 ## Project rules
 
 These keep TypeCam small, fast and predictable. Pull requests that break them will be asked to change.

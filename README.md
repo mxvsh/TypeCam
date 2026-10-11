@@ -119,6 +119,8 @@ cp -R build_macos/RelWithDebInfo/obs-typecam.plugin \
   ~/Library/Application\ Support/obs-studio/plugins/
 ```
 
+To build an App Store IPA, run `scripts/release.sh` (see [Releasing](CONTRIBUTING.md#releasing-the-ios-app)).
+
 ### 3. Stream
 
 1. Connect the iPhone to your Mac with a cable and tap **Trust** if asked.

@@ -22,4 +22,11 @@ xcodebuild -project ios/TypeCam.xcodeproj -scheme TypeCam -destination 'generic/
 
 # OBS plugin
 cd obs-plugin && cmake --preset macos && cmake --build --preset macos
+
+# App Store IPA (bumps ios/Config/Version.xcconfig, archives, exports to build/release/)
+scripts/release.sh
 ```
+
+Version and build number live in `ios/Config/Version.xcconfig`, signing in `ios/Config/App.xcconfig` +
+git-ignored `Local.xcconfig`. Never write `DEVELOPMENT_TEAM`, `MARKETING_VERSION` or `CURRENT_PROJECT_VERSION`
+into `project.pbxproj`.

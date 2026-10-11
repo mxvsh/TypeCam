@@ -39,6 +39,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# xcodebuild -exportArchive shells out to rsync and friends from PATH. A Homebrew rsync breaks it
+# with "Copy failed", so put Apple's tools first.
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
 PROJECT="${PROJECT:-ios/TypeCam.xcodeproj}"
 SCHEME="${SCHEME:-TypeCam}"
 CONFIGURATION="${CONFIGURATION:-Release}"
@@ -231,6 +235,7 @@ info "Team $TEAM_ID"
 
 # ---- archive --------------------------------------------------------------------------------
 
+case "$OUTPUT_DIR" in /*) ;; *) OUTPUT_DIR="$ROOT/$OUTPUT_DIR" ;; esac
 NAME="$SCHEME-$NEW_VERSION-$NEW_BUILD"
 ARCHIVE="$OUTPUT_DIR/$NAME.xcarchive"
 EXPORT_DIR="$OUTPUT_DIR/$NAME"
@@ -244,6 +249,15 @@ run_logged() { # run_logged LOGFILE cmd… ; quiet unless it fails
 	if ! "$@" >"$log" 2>&1; then
 		echo
 		grep -E 'error:|BUILD FAILED|ARCHIVE FAILED|EXPORT FAILED|\*\* ' "$log" | tail -n 25 >&2 || true
+		# Export errors are vague; Xcode writes the details to a log bundle in a temp folder.
+		local bundle
+		bundle="$(sed -n 's/.*Created bundle at path "\(.*\.xcdistributionlogs\)".*/\1/p' "$log" | tail -n 1)"
+		if [ -n "$bundle" ] && [ -d "$bundle" ]; then
+			rm -rf "$LOG_DIR/distribution"
+			cp -R "$bundle" "$LOG_DIR/distribution"
+			printf '\n%sXcode distribution log:%s %s\n' "$DIM" "$RESET" "$LOG_DIR/distribution" >&2
+			grep -hiE 'error|fail|rsync' "$LOG_DIR/distribution"/*.log 2>/dev/null | tail -n 15 >&2 || true
+		fi
 		if grep -q "No Accounts" "$log"; then
 			printf '\n%shint:%s %s\n' "$YELLOW" "$RESET" "Xcode isn't signed in to an Apple account. Add one in Xcode › Settings › Accounts" >&2
 			printf '      (it needs the Admin or Account Holder role on team %s), or use an App Store Connect\n' "${TEAM_ID:-}" >&2

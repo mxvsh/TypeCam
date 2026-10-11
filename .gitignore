@@ -7,7 +7,7 @@ DerivedData/
 *.xcuserstate
 build/
 
-# Personal signing settings (see ios/Config/Signing.xcconfig)
+# Personal signing settings (see ios/Config/App.xcconfig)
 ios/Config/Local.xcconfig
 
 # OBS plugin (CMake)

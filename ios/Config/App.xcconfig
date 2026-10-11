@@ -1,9 +1,12 @@
-// Signing settings for the TypeCam app target.
+// Base build settings for the TypeCam app target.
 //
 // Don't put personal values here. Copy Local.xcconfig.example to Local.xcconfig
 // (it's git-ignored) and set your own team and bundle ID prefix there:
 //
 //     cp ios/Config/Local.xcconfig.example ios/Config/Local.xcconfig
+
+// App version and build number. Bumped by scripts/release.sh.
+#include "Version.xcconfig"
 
 // Your Apple Developer team ID (Xcode › Settings › Accounts, or developer.apple.com › Membership).
 DEVELOPMENT_TEAM =

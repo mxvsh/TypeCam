@@ -1,0 +1,7 @@
+// Managed by scripts/release.sh. You can edit it by hand, but the release script is easier.
+
+// The user-facing version (CFBundleShortVersionString), MAJOR.MINOR.PATCH.
+MARKETING_VERSION = 1.0.0
+
+// The build number (CFBundleVersion). Must go up with every upload to App Store Connect.
+CURRENT_PROJECT_VERSION = 1

@@ -78,7 +78,8 @@ scripts/release.sh minor --upload  # upload straight to App Store Connect instea
 
 Upload the IPA with Transporter, or use `--upload`. You need your team set in `Local.xcconfig` (or
 `DEVELOPMENT_TEAM=… scripts/release.sh`) and your Apple account signed in under **Xcode › Settings › Accounts**.
-If the build fails, the version file is restored. Don't edit the version in Xcode's **General** tab: that writes
+The short git commit is embedded in the app and shown in **Settings › About** (with `-dirty` if you used
+`--allow-dirty`). If the build fails, the version file is restored. Don't edit the version in Xcode's **General** tab: that writes
 it into `project.pbxproj`, where it overrides `Version.xcconfig`.
 
 The script isn't tied to TypeCam. Set `PROJECT`, `SCHEME`, `VERSION_FILE` and `TAG_PREFIX` to use it with

@@ -6,8 +6,9 @@
 #   scripts/release.sh minor           # no prompt
 #   scripts/release.sh patch --upload  # upload to App Store Connect instead of exporting an IPA
 #
-# Steps: bump the version and build number in the version xcconfig, archive in Release,
-# export an IPA (upload it with Transporter) and, if you agree, commit the bump and tag it.
+# Steps: bump the version and build number in the version xcconfig, archive in Release with
+# the current git commit embedded, export an IPA (upload it with Transporter) and, if you agree,
+# commit the bump and tag it.
 #
 # Works with any Xcode project whose target takes MARKETING_VERSION and CURRENT_PROJECT_VERSION
 # from an xcconfig. Defaults are for TypeCam; override any of them with environment variables:
@@ -18,6 +19,7 @@
 #   VERSION_FILE   xcconfig holding the version         (ios/Config/Version.xcconfig)
 #   OUTPUT_DIR     where archives and IPAs go           (build/release)
 #   TAG_PREFIX     git tag prefix                       (ios/v)
+#   COMMIT_SETTING build setting that receives the git commit (APP_GIT_COMMIT)
 #   DEVELOPMENT_TEAM  team ID; overrides the xcconfig (handy on CI)
 #
 # Requires macOS with Xcode, signed in to an Apple account that belongs to the team
@@ -39,6 +41,7 @@ CONFIGURATION="${CONFIGURATION:-Release}"
 VERSION_FILE="${VERSION_FILE:-ios/Config/Version.xcconfig}"
 OUTPUT_DIR="${OUTPUT_DIR:-build/release}"
 TAG_PREFIX="${TAG_PREFIX:-ios/v}"
+COMMIT_SETTING="${COMMIT_SETTING:-APP_GIT_COMMIT}"
 
 # ---- helpers --------------------------------------------------------------------------------
 
@@ -107,6 +110,13 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 	fi
 fi
 
+# The commit being built. The version-bump commit made at the end only touches the version file.
+GIT_COMMIT="unknown"
+if [ "$IN_GIT" -eq 1 ]; then
+	GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+	[ -n "$(git status --porcelain)" ] && GIT_COMMIT="$GIT_COMMIT-dirty"
+fi
+
 CURRENT_VERSION="$(read_setting MARKETING_VERSION "$VERSION_FILE")"
 CURRENT_BUILD="$(read_setting CURRENT_PROJECT_VERSION "$VERSION_FILE")"
 
@@ -158,7 +168,10 @@ fi
 
 NEW_VERSION="$(version_for "$BUMP")"
 TAG="$TAG_PREFIX$NEW_VERSION"
-[ "$BUMP" = "keep" ] && TAG="$TAG_PREFIX$NEW_VERSION-$NEW_BUILD"
+# A re-release of an already tagged version gets the build number appended.
+if [ "$BUMP" = "keep" ] && [ "$IN_GIT" -eq 1 ] && git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+	TAG="$TAG-$NEW_BUILD"
+fi
 
 if [ "$IN_GIT" -eq 1 ] && git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
 	die "tag $TAG already exists. Pick a different bump."
@@ -167,6 +180,7 @@ fi
 echo
 info "Version  $CURRENT_VERSION → ${BOLD}$NEW_VERSION${RESET}"
 info "Build    $CURRENT_BUILD → ${BOLD}$NEW_BUILD${RESET}"
+info "Commit   $GIT_COMMIT"
 if [ "$UPLOAD" -eq 1 ]; then info "Output   upload to App Store Connect"; else info "Output   IPA in $OUTPUT_DIR/"; fi
 echo
 confirm "Continue?" y || exit 0
@@ -188,7 +202,7 @@ write_version_file "$NEW_VERSION" "$NEW_BUILD"
 
 # ---- signing --------------------------------------------------------------------------------
 
-EXTRA_SETTINGS=()
+EXTRA_SETTINGS=("$COMMIT_SETTING=$GIT_COMMIT")
 if [ -n "${DEVELOPMENT_TEAM:-}" ]; then
 	TEAM_ID="$DEVELOPMENT_TEAM"
 	EXTRA_SETTINGS+=("DEVELOPMENT_TEAM=$TEAM_ID")
@@ -220,7 +234,7 @@ run_logged() { # run_logged LOGFILE cmd… ; quiet unless it fails
 	fi
 }
 
-step "Archiving $SCHEME $NEW_VERSION ($NEW_BUILD)"
+step "Archiving $SCHEME $NEW_VERSION ($NEW_BUILD) at $GIT_COMMIT"
 info "${DIM}this takes a few minutes · log: $LOG_DIR/archive.log${RESET}"
 run_logged "$LOG_DIR/archive.log" xcodebuild archive \
 	-project "$PROJECT" \
@@ -278,7 +292,7 @@ if [ "$IN_GIT" -eq 1 ]; then
 	if confirm "Commit the version bump and tag it $TAG?" y; then
 		if git add "$VERSION_FILE" &&
 			git commit -q -m "Release $SCHEME $NEW_VERSION ($NEW_BUILD)" &&
-			git tag -a "$TAG" -m "$SCHEME $NEW_VERSION ($NEW_BUILD)"; then
+			git tag -a "$TAG" -m "$SCHEME $NEW_VERSION ($NEW_BUILD), built from $GIT_COMMIT"; then
 			info "Committed and tagged $TAG. Push with: git push --follow-tags"
 		else
 			warn "couldn't commit or tag. The build is fine; commit $VERSION_FILE yourself."

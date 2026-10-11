@@ -22,9 +22,13 @@
 #   COMMIT_SETTING build setting that receives the git commit (APP_GIT_COMMIT)
 #   DEVELOPMENT_TEAM  team ID; overrides the xcconfig (handy on CI)
 #
-# Requires macOS with Xcode, signed in to an Apple account that belongs to the team
-# (Xcode › Settings › Accounts). Signing is automatic; Xcode creates the distribution
-# certificate and App Store profile when needed.
+# Signing is automatic: Xcode creates the distribution certificate and App Store profile when
+# needed. It authenticates with one of:
+#
+#   - the Apple account signed in under Xcode › Settings › Accounts (Admin or Account Holder
+#     role on the team, so it may create a distribution certificate), or
+#   - an App Store Connect API key (App Store Connect › Users and Access › Integrations), with
+#     ASC_KEY_PATH (the .p8 file), ASC_KEY_ID and ASC_ISSUER_ID set. No Xcode login needed.
 #
 # Written for the bash 3.2 that ships with macOS.
 
@@ -202,6 +206,16 @@ write_version_file "$NEW_VERSION" "$NEW_BUILD"
 
 # ---- signing --------------------------------------------------------------------------------
 
+# Optional App Store Connect API key for provisioning, instead of the Xcode account.
+AUTH_ARGS=()
+if [ -n "${ASC_KEY_PATH:-}${ASC_KEY_ID:-}${ASC_ISSUER_ID:-}" ]; then
+	[ -n "${ASC_KEY_PATH:-}" ] && [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ] ||
+		die "set all three of ASC_KEY_PATH, ASC_KEY_ID and ASC_ISSUER_ID to use an API key"
+	[ -f "$ASC_KEY_PATH" ] || die "API key not found: $ASC_KEY_PATH"
+	AUTH_ARGS=(-authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID"
+		-authenticationKeyIssuerID "$ASC_ISSUER_ID")
+fi
+
 EXTRA_SETTINGS=("$COMMIT_SETTING=$GIT_COMMIT")
 if [ -n "${DEVELOPMENT_TEAM:-}" ]; then
 	TEAM_ID="$DEVELOPMENT_TEAM"
@@ -230,6 +244,11 @@ run_logged() { # run_logged LOGFILE cmd… ; quiet unless it fails
 	if ! "$@" >"$log" 2>&1; then
 		echo
 		grep -E 'error:|BUILD FAILED|ARCHIVE FAILED|EXPORT FAILED|\*\* ' "$log" | tail -n 25 >&2 || true
+		if grep -q "No Accounts" "$log"; then
+			printf '\n%shint:%s %s\n' "$YELLOW" "$RESET" "Xcode isn't signed in to an Apple account. Add one in Xcode › Settings › Accounts" >&2
+			printf '      (it needs the Admin or Account Holder role on team %s), or use an App Store Connect\n' "${TEAM_ID:-}" >&2
+			printf '      API key with ASC_KEY_PATH, ASC_KEY_ID and ASC_ISSUER_ID. See the top of this script.\n' >&2
+		fi
 		die "failed. Full log: $log"
 	fi
 }
@@ -243,6 +262,7 @@ run_logged "$LOG_DIR/archive.log" xcodebuild archive \
 	-destination "generic/platform=iOS" \
 	-archivePath "$ARCHIVE" \
 	-allowProvisioningUpdates \
+	${AUTH_ARGS[@]+"${AUTH_ARGS[@]}"} \
 	${EXTRA_SETTINGS[@]+"${EXTRA_SETTINGS[@]}"}
 
 # ---- export ---------------------------------------------------------------------------------
@@ -281,7 +301,8 @@ run_logged "$LOG_DIR/export.log" xcodebuild -exportArchive \
 	-archivePath "$ARCHIVE" \
 	-exportPath "$EXPORT_DIR" \
 	-exportOptionsPlist "$EXPORT_OPTIONS" \
-	-allowProvisioningUpdates
+	-allowProvisioningUpdates \
+	${AUTH_ARGS[@]+"${AUTH_ARGS[@]}"}
 
 DONE=1
 

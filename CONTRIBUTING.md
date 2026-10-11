@@ -77,7 +77,10 @@ scripts/release.sh minor --upload  # upload straight to App Store Connect instea
 ```
 
 Upload the IPA with Transporter, or use `--upload`. You need your team set in `Local.xcconfig` (or
-`DEVELOPMENT_TEAM=… scripts/release.sh`) and your Apple account signed in under **Xcode › Settings › Accounts**.
+`DEVELOPMENT_TEAM=… scripts/release.sh`). Xcode must be signed in under **Xcode › Settings › Accounts** with an
+account that has the Admin or Account Holder role, so it can create the distribution certificate and App Store
+profile. Alternatively, set `ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID` to sign with an App Store Connect
+API key.
 The short git commit is embedded in the app and shown in **Settings › About** (with `-dirty` if you used
 `--allow-dirty`). If the build fails, the version file is restored. Don't edit the version in Xcode's **General** tab: that writes
 it into `project.pbxproj`, where it overrides `Version.xcconfig`.

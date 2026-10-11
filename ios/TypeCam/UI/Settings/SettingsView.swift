@@ -29,7 +29,20 @@ struct SettingsView: View {
                 overlaysSection
                 displaySection
                 Section {
-                    NavigationLink("Connection & About") { AboutView(store: camera.store) }
+                    NavigationLink {
+                        ConnectionView(store: camera.store)
+                    } label: {
+                        Label("Connection", systemImage: "cable.connector")
+                    }
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        LabeledContent {
+                            Text(AppInfo.version)
+                        } label: {
+                            Label("About", systemImage: "info.circle")
+                        }
+                    }
                 }
             }
             .listStyle(.insetGrouped)

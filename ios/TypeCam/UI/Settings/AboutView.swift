@@ -4,62 +4,126 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct AboutView: View {
-    @Bindable var store: SettingsStore
+    @State private var copiedCommit = false
 
     var body: some View {
         List {
+            header
+
+            Section("Build") {
+                LabeledContent("Version", value: AppInfo.version)
+                LabeledContent("Build", value: AppInfo.build)
+                commitRow
+            }
+
             Section {
-                LabeledContent("Name in OBS") {
-                    TextField(UIDevice.current.name, text: $store.settings.deviceName)
-                        .multilineTextAlignment(.trailing)
-                        .submitLabel(.done)
-                        .autocorrectionDisabled()
-                }
-                LabeledContent("Port", value: "\(Wire.port)")
-                LabeledContent("Protocol", value: "v\(Wire.protocolVersion)")
+                linkRow("Send Feedback on X", systemImage: "bubble.left.and.text.bubble.right", url: AppInfo.feedbackURL)
+                linkRow("Follow @\(AppInfo.authorHandle)", systemImage: "person.crop.circle.badge.plus",
+                        url: AppInfo.authorProfileURL)
+                linkRow("Report an Issue", systemImage: "ladybug", url: AppInfo.newIssueURL)
             } header: {
-                Text("Connection")
+                Text("Feedback")
             } footer: {
-                Text("iOS only tells apps this phone is called \"\(UIDevice.current.name)\". Set a name to tell phones apart in OBS.")
+                Text("Feedback opens a post to @\(AppInfo.authorHandle) with your app version and iPhone model filled in.")
             }
+
             Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    step(1, "Connect the iPhone to your Mac with a USB cable.")
-                    step(2, "Tap Trust on the iPhone if asked.")
-                    step(3, "In OBS, add a TypeCam (iPhone) source and pick this device.")
-                    step(4, "Keep TypeCam open. Use dim mode instead of locking the phone.")
-                }
-                .padding(.vertical, 4)
+                linkRow("Source Code", systemImage: "chevron.left.forwardslash.chevron.right",
+                        url: AppInfo.repositoryURL, detail: "GitHub")
+                linkRow("Website", systemImage: "globe", url: AppInfo.websiteURL)
             } header: {
-                Text("How to connect")
-            }
-            Section("About") {
-                LabeledContent("Version", value: appVersion)
+                Text("Open Source")
+            } footer: {
+                Text("TypeCam is open source under the MIT License. Made by \(AppInfo.authorName).")
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(Theme.background)
-        .navigationTitle("Connection & About")
+        .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func step(_ number: Int, _ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("\(number)")
-                .font(.caption.weight(.bold))
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(Theme.accent))
-            Text(text).font(.subheadline)
+    private var header: some View {
+        Section {
+            VStack(spacing: 6) {
+                Image("AppLogo")
+                    .resizable()
+                    .frame(width: 84, height: 84)
+                    .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 19, style: .continuous)
+                            .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .padding(.bottom, 6)
+                    .accessibilityHidden(true)
+                Text("TypeCam")
+                    .font(.title2.weight(.semibold))
+                Text("Your iPhone as a wired camera for OBS")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .listRowBackground(Color.clear)
         }
     }
 
-    private var appVersion: String {
-        let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String ?? "–"
-        let build = info?["CFBundleVersion"] as? String ?? "–"
-        return "\(version) (\(build))"
+    @ViewBuilder
+    private var commitRow: some View {
+        if let commit = AppInfo.commit {
+            Button {
+                UIPasteboard.general.string = commit
+                withAnimation { copiedCommit = true }
+                Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    withAnimation { copiedCommit = false }
+                }
+            } label: {
+                LabeledContent("Commit") {
+                    HStack(spacing: 6) {
+                        Text(copiedCommit ? "Copied" : commit)
+                            .monospaced()
+                            .contentTransition(.opacity)
+                        Image(systemName: copiedCommit ? "checkmark" : "doc.on.doc")
+                            .font(.caption)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .foregroundStyle(Theme.secondaryText)
+                }
+                .foregroundStyle(.white)
+            }
+            .contextMenu {
+                Button("Copy Commit", systemImage: "doc.on.doc") { UIPasteboard.general.string = commit }
+                if let url = AppInfo.commitURL {
+                    Link(destination: url) { Label("View on GitHub", systemImage: "arrow.up.right") }
+                }
+            }
+            .accessibilityHint("Copies the commit hash")
+        } else {
+            LabeledContent("Commit", value: "Development build")
+        }
+    }
+
+    private func linkRow(_ title: String, systemImage: String, url: URL, detail: String? = nil) -> some View {
+        Link(destination: url) {
+            HStack {
+                Label {
+                    Text(title).foregroundStyle(.white)
+                } icon: {
+                    Image(systemName: systemImage).foregroundStyle(Theme.accent)
+                }
+                Spacer()
+                if let detail {
+                    Text(detail).foregroundStyle(Theme.secondaryText)
+                }
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+        }
     }
 }

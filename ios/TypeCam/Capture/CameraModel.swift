@@ -300,11 +300,7 @@ final class CameraModel {
     }
 
     private func pushDeviceInfo() {
-        var system = utsname()
-        uname(&system)
-        let model = withUnsafeBytes(of: system.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
-        streamer.setDeviceInfo(["device_name": deviceName, "model": model, "app_version": version])
+        streamer.setDeviceInfo(["device_name": deviceName, "model": AppInfo.deviceModel, "app_version": AppInfo.version])
     }
 
     // MARK: - Rotation

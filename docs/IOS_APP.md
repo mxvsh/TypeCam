@@ -141,10 +141,23 @@ icon when muted.
 | Dim style | Blackout · Dim preview (lowest brightness) | Blackout |
 | Show telemetry on camera screen | On / Off | Off |
 
-#### About / Connection
+#### Connection
 
-**Name in OBS** (editable; defaults to the system name, which iOS reports only as "iPhone"), port 7878 (read-only), protocol version, app version, connection help
-("Connect with a USB cable, tap *Trust* on the phone, add a *TypeCam* source in OBS").
+**Name in OBS** (editable; defaults to the system name, which iOS reports only as "iPhone"), port 7878 (read-only),
+protocol version, connection help ("Connect with a USB cable, tap *Trust* on the phone, add a *TypeCam* source in
+OBS") and a link to the plugin on GitHub.
+
+#### About
+
+| Section | Rows |
+|---|---|
+| Header | App icon, name, tagline |
+| Build | Version, build number, commit. Tap the commit to copy it; long-press for *View on GitHub*. Local Xcode builds show "Development build". |
+| Feedback | *Send Feedback on X* (opens a post to @monawwarx with version, build, commit, iPhone model and iOS version filled in), *Follow @monawwarx*, *Report an Issue* (GitHub) |
+| Open Source | *Source Code* (GitHub), *Website*; footer with the MIT License and author |
+
+Links and the author handle live in `App/AppInfo.swift`. The commit comes from the `GitCommit` Info.plist key
+(`ios/Config/Info.plist` ← `APP_GIT_COMMIT`), which `scripts/release.sh` sets to the short hash being built.
 
 ## Telemetry sheet
 

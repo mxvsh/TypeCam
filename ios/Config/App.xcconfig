@@ -8,6 +8,10 @@
 // App version and build number. Bumped by scripts/release.sh.
 #include "Version.xcconfig"
 
+// Git commit the app was built from, shown in Settings › About. scripts/release.sh sets it;
+// local Xcode builds show "Development build".
+APP_GIT_COMMIT = dev
+
 // Your Apple Developer team ID (Xcode › Settings › Accounts, or developer.apple.com › Membership).
 DEVELOPMENT_TEAM =
 

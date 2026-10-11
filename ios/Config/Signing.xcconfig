@@ -1,0 +1,15 @@
+// Signing settings for the TypeCam app target.
+//
+// Don't put personal values here. Copy Local.xcconfig.example to Local.xcconfig
+// (it's git-ignored) and set your own team and bundle ID prefix there:
+//
+//     cp ios/Config/Local.xcconfig.example ios/Config/Local.xcconfig
+
+// Your Apple Developer team ID (Xcode › Settings › Accounts, or developer.apple.com › Membership).
+DEVELOPMENT_TEAM =
+
+// Reverse-DNS prefix for the app's bundle ID. The app becomes $(BUNDLE_ID_PREFIX).TypeCam.
+// Bundle IDs are unique per Apple account, so change this to something you own.
+BUNDLE_ID_PREFIX = com.example
+
+#include? "Local.xcconfig"

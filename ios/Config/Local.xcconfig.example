@@ -1,0 +1,4 @@
+// Personal signing settings. Copy this file to Local.xcconfig (git-ignored) and fill it in.
+
+DEVELOPMENT_TEAM = ABCDE12345
+BUNDLE_ID_PREFIX = com.yourname

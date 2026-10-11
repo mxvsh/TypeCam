@@ -8,9 +8,9 @@
 
 /* Begin PBXFileReference section */
 		3CD1A649307646420021E47A /* TypeCam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TypeCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3CD1A65A307646430021E47A /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
 		3CD1A65B307646430021E47A /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 		3CD1A65C307646430021E47A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		3CD1A65A307646430021E47A /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -39,6 +39,14 @@
 			);
 			sourceTree = "<group>";
 		};
+		3CD1A64A307646420021E47A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3CD1A649307646420021E47A /* TypeCam.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		3CD1A659307646430021E47A /* Config */ = {
 			isa = PBXGroup;
 			children = (
@@ -47,14 +55,6 @@
 				3CD1A65C307646430021E47A /* Info.plist */,
 			);
 			path = Config;
-			sourceTree = "<group>";
-		};
-		3CD1A64A307646420021E47A /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				3CD1A649307646420021E47A /* TypeCam.app */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -259,11 +259,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "TypeCam streams your camera to OBS on your Mac.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "TypeCam streams your microphone audio to OBS on your Mac.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "TypeCam streams your camera to OBS on your Mac.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "TypeCam streams your microphone audio to OBS on your Mac.";
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
@@ -294,11 +294,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "TypeCam streams your camera to OBS on your Mac.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "TypeCam streams your microphone audio to OBS on your Mac.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "TypeCam streams your camera to OBS on your Mac.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "TypeCam streams your microphone audio to OBS on your Mac.";
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;

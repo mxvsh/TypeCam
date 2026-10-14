@@ -105,12 +105,11 @@ quarantine flag. To ship a Developer ID signed, notarized build, add these repos
 
 | Secret | Value |
 |---|---|
-| `MACOS_CERT_P12` | Base64 of the *Developer ID Application* certificate exported as `.p12` |
-| `MACOS_CERT_PASSWORD` | Password of that `.p12` |
-| `MACOS_CODESIGN_IDENT` | Certificate name, e.g. `Developer ID Application: Your Name (TEAMID)` |
-| `MACOS_CODESIGN_TEAM` | Apple team ID |
-| `NOTARY_KEY_P8` | Contents of an App Store Connect API key (`.p8`) |
-| `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID` | That key's ID and the issuer ID |
+| `BUILD_CERTIFICATE_BASE64` | Base64 of the *Developer ID Application* certificate exported as `.p12` |
+| `P12_PASSWORD` | Password of that `.p12` |
+| `APPLE_TEAM_ID` | Apple team ID |
+| `APPLE_ID` | Apple ID email used for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password from appleid.apple.com |
 
 The **Run workflow** button builds without publishing and uploads the zip as a workflow artifact.
 

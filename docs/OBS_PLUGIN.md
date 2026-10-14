@@ -83,7 +83,9 @@ cp -R build_macos/RelWithDebInfo/obs-typecam.plugin \
 If the first `cmake --build` after editing `CMakeLists.txt` fails at link time, run it again: the Xcode
 project was being regenerated.
 
-Distribution (M7): signed and notarized `.pkg` that installs to the per-user plugins folder.
+Distribution: tagging `plugin/vX.Y.Z` builds the universal plugin in GitHub Actions and publishes a zip as a
+GitHub Release (see [CONTRIBUTING.md](../CONTRIBUTING.md#releasing-the-obs-plugin)). A signed and notarized `.pkg`
+installer for the per-user plugins folder is still to do (M7).
 
 ## Requirements for users
 

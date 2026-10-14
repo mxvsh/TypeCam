@@ -88,6 +88,32 @@ it into `project.pbxproj`, where it overrides `Version.xcconfig`.
 The script isn't tied to TypeCam. Set `PROJECT`, `SCHEME`, `VERSION_FILE` and `TAG_PREFIX` to use it with
 another Xcode project. See the header of the script for details.
 
+## Releasing the OBS plugin
+
+Pushing a tag named `plugin/vX.Y.Z` runs `.github/workflows/obs-plugin-release.yml`. It builds the universal
+macOS plugin on a GitHub-hosted runner, zips it with a SHA-256 checksum and publishes a GitHub Release. The tag
+sets the plugin version (it overrides `version` in `obs-plugin/buildspec.json` for that build). A tag with a
+suffix such as `plugin/v0.2.0-rc1` is marked as a pre-release.
+
+```sh
+git tag -a plugin/v0.2.0 -m "OBS plugin 0.2.0"
+git push origin plugin/v0.2.0
+```
+
+Without secrets the plugin is ad-hoc signed and not notarized, and the release notes tell users how to clear the
+quarantine flag. To ship a Developer ID signed, notarized build, add these repository secrets:
+
+| Secret | Value |
+|---|---|
+| `MACOS_CERT_P12` | Base64 of the *Developer ID Application* certificate exported as `.p12` |
+| `MACOS_CERT_PASSWORD` | Password of that `.p12` |
+| `MACOS_CODESIGN_IDENT` | Certificate name, e.g. `Developer ID Application: Your Name (TEAMID)` |
+| `MACOS_CODESIGN_TEAM` | Apple team ID |
+| `NOTARY_KEY_P8` | Contents of an App Store Connect API key (`.p8`) |
+| `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID` | That key's ID and the issuer ID |
+
+The **Run workflow** button builds without publishing and uploads the zip as a workflow artifact.
+
 ## Project rules
 
 These keep TypeCam small, fast and predictable. Pull requests that break them will be asked to change.

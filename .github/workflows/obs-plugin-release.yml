@@ -1,0 +1,134 @@
+name: OBS plugin release
+
+# Push a tag like `plugin/v0.2.0` to build the macOS plugin and publish a GitHub Release.
+# (iOS app tags are `ios/v*` and are created by scripts/release.sh; they don't trigger this.)
+on:
+  push:
+    tags: ["plugin/v*"]
+  workflow_dispatch: # build only, uploads the zip as a workflow artifact
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-15
+    env:
+      # Optional. Without these the plugin is ad-hoc signed and not notarized.
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      MACOS_CODESIGN_IDENT: ${{ secrets.MACOS_CODESIGN_IDENT }}
+      MACOS_CODESIGN_TEAM: ${{ secrets.MACOS_CODESIGN_TEAM }}
+      NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#plugin/v}"
+          else
+            VERSION="$(jq -r .version obs-plugin/buildspec.json)-dev"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # The tag is the source of truth for the plugin version.
+          jq --arg v "${VERSION%-dev}" '.version = $v' obs-plugin/buildspec.json > buildspec.tmp
+          mv buildspec.tmp obs-plugin/buildspec.json
+
+      - name: Cache OBS sources and deps
+        uses: actions/cache@v4
+        with:
+          path: obs-plugin/.deps
+          key: obs-deps-${{ hashFiles('obs-plugin/buildspec.json') }}
+
+      - name: Import signing certificate
+        if: env.MACOS_CERT_P12 != ''
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          echo "CODESIGN_IDENT=$MACOS_CODESIGN_IDENT" >> "$GITHUB_ENV"
+          echo "CODESIGN_TEAM=$MACOS_CODESIGN_TEAM" >> "$GITHUB_ENV"
+
+      - name: Configure
+        working-directory: obs-plugin
+        run: cmake --preset macos
+
+      - name: Build
+        working-directory: obs-plugin
+        run: cmake --build --preset macos
+
+      - name: Package
+        id: package
+        working-directory: obs-plugin
+        run: |
+          PLUGIN=build_macos/RelWithDebInfo/obs-typecam.plugin
+          test -d "$PLUGIN"
+          codesign --verify --deep --strict "$PLUGIN"
+          lipo -archs "$PLUGIN/Contents/MacOS/obs-typecam"
+
+          ZIP="obs-typecam-${{ steps.version.outputs.version }}-macos-universal.zip"
+          if [[ -n "$NOTARY_KEY_P8" && -n "$MACOS_CERT_P12" ]]; then
+            echo "$NOTARY_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+            ditto -c -k --keepParent "$PLUGIN" "$RUNNER_TEMP/notarize.zip"
+            xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+              --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait
+            xcrun stapler staple "$PLUGIN"
+            echo "notarized=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notarized=false" >> "$GITHUB_OUTPUT"
+          fi
+          ditto -c -k --keepParent "$PLUGIN" "$ZIP"
+          shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
+          echo "zip=obs-plugin/$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-typecam-macos
+          path: |
+            ${{ steps.package.outputs.zip }}
+            ${{ steps.package.outputs.zip }}.sha256
+
+      - name: Write release notes
+        if: github.ref_type == 'tag'
+        run: |
+          {
+            echo "TypeCam OBS plugin ${{ steps.version.outputs.version }} for macOS 13+ and OBS 31+ (universal: Apple silicon and Intel)."
+            echo
+            echo "Get the iPhone app from the [App Store](https://apps.apple.com/us/app/typecam-obs-camera/id6821537950)."
+            echo
+            echo "### Install"
+            echo
+            echo "1. Quit OBS."
+            echo "2. Unzip and move \`obs-typecam.plugin\` to \`~/Library/Application Support/obs-studio/plugins/\`."
+            echo "3. Open OBS and add a **TypeCam (iPhone)** source."
+            if [[ "${{ steps.package.outputs.notarized }}" != "true" ]]; then
+              echo
+              echo "This build is not notarized. If macOS blocks it, run:"
+              echo
+              echo '```sh'
+              echo 'xattr -dr com.apple.quarantine ~/Library/Application\ Support/obs-studio/plugins/obs-typecam.plugin'
+              echo '```'
+            fi
+          } > release-notes.md
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: OBS plugin ${{ steps.version.outputs.version }}
+          body_path: release-notes.md
+          files: |
+            ${{ steps.package.outputs.zip }}
+            ${{ steps.package.outputs.zip }}.sha256
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}

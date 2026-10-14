@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://apps.apple.com/us/app/typecam-obs-camera/id6821537950">App Store</a> ·
   <a href="https://monawwar.com/apps/typecam">Website</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a> ·
   <a href="docs/ROADMAP.md">Roadmap</a> ·
@@ -19,7 +20,7 @@
   <img alt="iOS 18+" src="https://img.shields.io/badge/iOS-18%2B-111?logo=apple&logoColor=white">
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-111?logo=apple&logoColor=white">
   <img alt="OBS 31+" src="https://img.shields.io/badge/OBS-31%2B-111?logo=obsstudio&logoColor=white">
-  <img alt="Status: v1 in development" src="https://img.shields.io/badge/status-v1%20in%20development-c9c8ff">
+  <a href="https://apps.apple.com/us/app/typecam-obs-camera/id6821537950"><img alt="Available on the App Store" src="https://img.shields.io/badge/App%20Store-available-c9c8ff?logo=appstore&logoColor=white"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-111"></a>
 </p>
 
@@ -28,6 +29,10 @@
 Plug your iPhone into your Mac, open TypeCam, and add a **TypeCam (iPhone)** source in OBS. The phone
 hardware-encodes video and audio and sends it down the cable. No Wi-Fi, no network setup, no pairing beyond
 *Trust This Computer*.
+
+<p align="center">
+  <a href="https://apps.apple.com/us/app/typecam-obs-camera/id6821537950"><b>Download TypeCam on the App Store</b></a>
+</p>
 
 ## Features
 
@@ -73,14 +78,16 @@ that port on the attached device, then speaks a small framed binary protocol ove
 - Mac on **macOS 13** or later with **OBS Studio 31** or later
 - A USB-C or Lightning cable
 
-To build from source you also need the latest **Xcode** and **CMake 3.28+**.
+To build the plugin (or the app) from source you also need the latest **Xcode** and **CMake 3.28+**.
 
 ## Getting started
 
-> TypeCam is pre-release. There's no App Store build or signed plugin installer yet, so for now you build both
-> pieces from source. See the [roadmap](docs/ROADMAP.md) for progress toward v1.
+### 1. Install the iOS app
 
-### 1. Build and run the iOS app
+Get **[TypeCam – OBS Camera](https://apps.apple.com/us/app/typecam-obs-camera/id6821537950)** from the App Store and install it on your iPhone.
+
+<details>
+<summary>Or build the app from source</summary>
 
 ```sh
 git clone https://github.com/mxvsh/TypeCam.git
@@ -103,7 +110,11 @@ Then open the project, pick your iPhone and press **Run**:
 open ios/TypeCam.xcodeproj
 ```
 
+</details>
+
 ### 2. Build and install the OBS plugin
+
+The OBS plugin isn't distributed as an installer yet, so build it from source:
 
 ```sh
 cd obs-plugin
@@ -131,9 +142,9 @@ The source's **Status** line shows the resolution, frame rate, codec and estimat
 
 ## Status
 
-TypeCam is working end to end over USB (video, audio, pro controls and overlays). The last v1 milestone is
-telemetry, power management, onboarding and a signed, notarized plugin installer. Windows and Linux plugin builds,
-Wi-Fi fallback and controlling the phone from OBS are planned for v2. See [ROADMAP.md](docs/ROADMAP.md).
+TypeCam 1.0 is out on the App Store and works end to end over USB (video, audio, pro controls and overlays). A
+signed, notarized plugin installer is still to come. Windows and Linux plugin builds, Wi-Fi fallback and controlling
+the phone from OBS are planned for v2. See [ROADMAP.md](docs/ROADMAP.md).
 
 ## Contributing
 
